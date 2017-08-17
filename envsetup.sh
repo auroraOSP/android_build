@@ -204,6 +204,13 @@ function check_product()
         echo "Couldn't locate the top of the tree.  Try setting TOP." >&2
         return
     fi
+    if (echo -n $1 | grep -q -e "^aurora_") ; then
+        AURORA_DEVICE=$(echo -n $1 | sed -e 's/^aurora_//g')
+    else
+        AURORA_DEVICE=
+    fi
+    export AURORA_DEVICE
+
         TARGET_PRODUCT=$1 \
         TARGET_RELEASE= \
         TARGET_BUILD_VARIANT= \
@@ -819,6 +826,8 @@ function lunch()
         return 1
     fi
 
+    check_product $product
+
     TARGET_PRODUCT=$product \
     TARGET_BUILD_VARIANT=$variant \
     TARGET_RELEASE=$release \
@@ -838,6 +847,8 @@ function lunch()
     export TARGET_BUILD_TYPE=release
 
     [[ -n "${ANDROID_QUIET_BUILD:-}" ]] || echo
+
+    fixup_common_out_dir
 
     set_stuff_for_environment
     [[ -n "${ANDROID_QUIET_BUILD:-}" ]] || printconfig
@@ -2078,6 +2089,24 @@ function aninja() {
     (\cd "${T}" && prebuilts/build-tools/linux-x86/bin/ninja -f out/combined-${TARGET_PRODUCT}.ninja "$@")
 }
 
+function fixup_common_out_dir() {
+    common_out_dir=$(get_build_var OUT_DIR)/target/common
+    target_device=$(get_build_var TARGET_DEVICE)
+    common_target_out=common-${target_device}
+    if [ ! -z $AURORA_FIXUP_COMMON_OUT ]; then
+        if [ -d ${common_out_dir} ] && [ ! -L ${common_out_dir} ]; then
+            mv ${common_out_dir} ${common_out_dir}-${target_device}
+            ln -s ${common_target_out} ${common_out_dir}
+        else
+            [ -L ${common_out_dir} ] && rm ${common_out_dir}
+            mkdir -p ${common_out_dir}-${target_device}
+            ln -s ${common_target_out} ${common_out_dir}
+        fi
+    else
+        [ -L ${common_out_dir} ] && rm ${common_out_dir}
+        mkdir -p ${common_out_dir}
+    fi
+}
 validate_current_shell
 set_global_paths
 source_vendorsetup
