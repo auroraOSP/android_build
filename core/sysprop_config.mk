@@ -139,6 +139,9 @@ user_variant := $(filter user userdebug,$(TARGET_BUILD_VARIANT))
 config_enable_uffd_gc := \
   $(firstword $(OVERRIDE_ENABLE_UFFD_GC) $(PRODUCT_ENABLE_UFFD_GC) default)
 
+# Include vendor specific additions to build properties
+-include vendor/aurora/build/core/props.mk
+
 ADDITIONAL_VENDOR_PROPERTIES := $(strip $(ADDITIONAL_VENDOR_PROPERTIES))
 
 .KATI_READONLY += \
