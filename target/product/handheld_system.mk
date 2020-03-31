@@ -70,7 +70,6 @@ PRODUCT_PACKAGES += \
     SimAppDialog \
     Telecom \
     TeleService \
-    Traceur \
     UserDictionaryProvider \
     VpnDialogs \
     vr \
@@ -100,3 +99,7 @@ PRODUCT_VENDOR_PROPERTIES += \
     ro.carrier?=unknown \
     ro.config.notification_sound?=OnTheHunt.ogg \
     ro.config.alarm_alert?=Alarm_Classic.ogg
+
+# Traceur for debug only
+PRODUCT_PACKAGES_ENG += \
+    Traceur
