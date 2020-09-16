@@ -5775,6 +5775,11 @@ INTERNAL_OTATOOLS_PACKAGE_FILES += \
       -name "atx_metadata.bin"))
 endif
 
+# Factory images
+INTERNAL_OTATOOLS_PACKAGE_FILES += \
+  device/common/clear-factory-images-variables.sh \
+  device/common/generate-factory-images-common.sh
+
 INTERNAL_OTATOOLS_RELEASETOOLS := \
   $(shell find build/make/tools/releasetools -name "*.pyc" -prune -o \
       \( -type f -o -type l \) -print | sort)
