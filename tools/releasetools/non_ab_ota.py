@@ -215,19 +215,20 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   script.Print("Target: {}".format(target_info.fingerprint))
 
   # Build info
-  script.Print("                                         ");
-  script.Print("            _____            _     _     ");
-  script.Print("           |  __ \          (_)   | |    ");
-  script.Print("   ___ _ __| |  | |_ __ ___  _  __| |    ");
-  script.Print("  / __| '__| |  | | '__/ _ \| |/ _\`|    ");
-  script.Print(" | (__| |  | |__| | | | (_) | | (_| |    ");
-  script.Print("  \___|_|  |_____/|_|_ \___/|_|\__,_|  _ ");
-  script.Print("     /\             | |         (_)   | |");
-  script.Print("    /  \   _ __   __| |_ __ ___  _  __| |");
-  script.Print("   / /\ \ | '_ \ / _\`| '__/ _ \| |/ _\`|");
-  script.Print("  / ____ \| | | | (_| | | | (_) | | (_| |");
-  script.Print(" /_/    \_\_| |_|\__,_|_|  \___/|_|\__,_|");
-  script.Print("                                         ");
+  script.Print("                                             ");
+  script.Print("                                             ");
+  script.Print("                                             ");
+  script.Print("                                             ");
+  script.Print("  ______ _____ _______ _____ __   _  ______  ");
+  script.Print(" |_____/   |   |______   |   | \  | |  ____  ");
+  script.Print(" |    \_ __|__ ______| __|__ |  \_| |_____|  ");
+  script.Print("          _____  _______                     ");
+  script.Print("         |     | |______                     ");
+  script.Print("         |_____| ______|                     ");
+  script.Print("                                             ");
+  script.Print("          rising from the bottom             ");
+  script.Print("                                             ");
+  script.Print("                                             ");
 
   buildid = target_info.GetBuildProp("ro.modversion")
   androidver = target_info.GetBuildProp("ro.build.version.release")

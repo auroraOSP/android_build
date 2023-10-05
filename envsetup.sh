@@ -835,13 +835,13 @@ function lunch()
         # if we can't find a product, try to grab it off the LineageOS GitHub
         T=$(gettop)
         cd $T > /dev/null
-        vendor/lineage/build/tools/roomservice.py $product
+        vendor/rising/build/tools/roomservice.py $product
         cd - > /dev/null
         check_product $product $release
     else
         T=$(gettop)
         cd $T > /dev/null
-        vendor/lineage/build/tools/roomservice.py $product true
+        vendor/rising/build/tools/roomservice.py $product true
         cd - > /dev/null
     fi
 
@@ -2117,6 +2117,269 @@ function aninja() {
     (\cd "${T}" && prebuilts/build-tools/linux-x86/bin/ninja -f out/combined-${TARGET_PRODUCT}.ninja "$@")
 }
 
+function setup_ccache() {
+    if [ -z "${CCACHE_EXEC}" ]; then
+        if command -v ccache &>/dev/null; then
+            export USE_CCACHE=1
+            export CCACHE_EXEC=$(command -v ccache)
+            [ -z "${CCACHE_DIR}" ] && export CCACHE_DIR="$HOME/.ccache"
+            echo "ccache directory found, CCACHE_DIR set to: $CCACHE_DIR" >&2
+            CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-40G}"
+            DIRECT_MODE="${DIRECT_MODE:-false}"
+            $CCACHE_EXEC -o compression=true -o direct_mode="${DIRECT_MODE}" -M "${CCACHE_MAXSIZE}" \
+                && echo "ccache enabled, CCACHE_EXEC set to: $CCACHE_EXEC, CCACHE_MAXSIZE set to: $CCACHE_MAXSIZE, direct_mode set to: $DIRECT_MODE" >&2 \
+                || echo "Warning: Could not set cache size limit. Please check ccache configuration." >&2
+            CURRENT_CCACHE_SIZE=$(du -sh "$CCACHE_DIR" 2>/dev/null | cut -f1)
+            if [ -n "$CURRENT_CCACHE_SIZE" ]; then
+                echo "Current ccache size is: $CURRENT_CCACHE_SIZE" >&2
+            else
+                echo "No cached files in ccache." >&2
+            fi
+        else
+            echo "Error: ccache not found. Please install ccache." >&2
+        fi
+    fi
+}
+
+function riseupload() {
+    read -p "Enter your SourceForge username: " sf_username
+    read -p "Enter the output filename (without .zip extension): " filename
+    read -p "Enter the package build type (fastboot or ota): " buildtype
+    target_device="$(get_build_var TARGET_DEVICE)"
+    package_type="$(get_build_var lineage_PACKAGE_TYPE)"
+    product_out="out/target/product/$target_device/"
+    source_file="$product_out/${filename}.zip"
+    destination="${sf_username}@frs.sourceforge.net:/home/frs/project/risingos-official/1.x/$package_type/${buildtype}/$target_device/"
+    rsync -e ssh "$source_file" "$destination"
+}
+
+function riseup() {
+    local device="$1"
+    local build_type="$2"
+    source ${ANDROID_BUILD_TOP}/vendor/rising/vars/aosp_target_release
+
+    if [ -z "$device" ]; then
+        if [[ -n "$TARGET_PRODUCT" ]]; then
+            device=$(echo "$TARGET_PRODUCT" | sed -E 's/lineage_([^_]+).*/\1/')
+            echo "No argument found for device, using TARGET_PRODUCT as device: $device"
+        else
+            echo "Correct usage: riseup <device_codename> [build_type]"
+            echo "Available build types: user, userdebug, eng"
+            return 1
+        fi
+    fi
+
+    if [ -z "$build_type" ]; then
+        build_type="userdebug"
+    fi
+
+    case "$build_type" in
+        user|userdebug|eng)
+        lunch lineage_"$device"-"$aosp_target_release"-"$build_type"
+        ;;
+        *)
+        echo "Invalid build type."
+        echo "Available build types are: user, userdebug & eng"
+        ;;
+    esac
+}
+
+function ascend() {
+    if [[ -z "$TARGET_PRODUCT" ]]; then
+        echo "Error: No device target set. Please use 'riseup' or 'lunch' to set the target device."
+        return 1
+    fi
+
+    echo "ascend is deprecated. Please use rise instead."
+    echo "Usage: rise [b|fb|ota]"
+    echo "   b   - Build bacon"
+    echo "   fb  - Fastboot update"
+    echo "   ota - OTA update"
+
+    case "$1" in
+        "fastboot")
+            rise fb
+            ;;
+        *)
+            rise ota
+            ;;
+    esac
+}
+
+function rise() {
+    if [[ "$1" == "help" ]]; then
+        echo "Usage: rise [b|fb|ota]"
+        echo "   b   - Build bacon"
+        echo "   fb  - Fastboot update"
+        echo "   ota - OTA update"
+        return 0
+    fi
+
+    if [[ -z "$TARGET_PRODUCT" ]]; then
+        echo "Error: No device target set. Please use 'riseup' or 'lunch' to set the target device."
+        return 1
+    fi
+
+    m installclean
+    
+    if [[ -z "$1" ]]; then
+        m
+        return 0
+    fi
+    
+    case "$1" in
+        "b")
+            m bacon
+            ;;
+        "fb")
+            m updatepackage
+            ;;
+        "ota")
+            m otapackage
+            ;;
+        *)
+            echo "Error: Invalid argument mode. Please use 'b', 'fb', 'ota', or 'help'."
+            echo "Usage: rise [b|fb|ota]"
+            echo "   b   - Build bacon"
+            echo "   fb  - Fastboot update"
+            echo "   ota - OTA update"
+            return 1
+            ;;
+    esac
+}
+
+function add_remote() {
+    local remote_name="$1"
+    local remote_url="$2"
+    local manifest_path="android/snippets/rising.xml"
+    local exclusion_list=("android" "vendor/risingOTA" "packages/apps/FaceUnlock" "vendor/gms")
+    if [[ -z "$remote_name" || -z "$remote_url" ]]; then
+        echo "Usage: add_remote <remote_name> <remote_url>"
+        return 1
+    fi
+    echo "Adding remote '$remote_name' with URL '$remote_url' to repositories in manifest: $manifest_path"
+    while IFS= read -r line; do
+        if [[ $line == *"<project "* && $line == *"remote="* ]]; then
+            local repo_path=$(echo "$line" | grep -oP 'path="\K[^"]+')
+            local manifest_entry=$(echo "$line" | grep -oP 'name="\K[^"]+')
+            local existing_remote=$(echo "$line" | grep -oP 'remote="\K[^"]+')
+            if [[ ! " ${exclusion_list[@]} " =~ " $repo_path " ]]; then
+                if [[ "$existing_remote" != "$remote_name" ]]; then
+                    local new_url="$remote_url/$manifest_entry"
+                    git -C "$repo_path" remote add "$remote_name" "$new_url"
+                    echo "Added remote '$remote_name' with URL '$new_url' to repository: $repo_path"
+                else
+                    echo "Remote '$remote_name' already exists in repository: $repo_path"
+                fi
+            else
+                echo "Repository '$repo_path' is in the exclusion list. Skipping..."
+            fi
+        fi
+    done < "$manifest_path"
+}
+
+function remove_remote() {
+    local remote_name="$1"
+    local manifest_path="android/snippets/rising.xml"
+    if [[ -z "$remote_name" ]]; then
+        echo "Usage: remove_remote <remote_name>"
+        return 1
+    fi
+    echo "Removing remote '$remote_name' from repositories in manifest: $manifest_path"
+    while IFS= read -r line; do
+        if [[ $line == *"<project "* && $line == *"remote="* ]]; then
+            local repo_path=$(echo "$line" | grep -oP 'path="\K[^"]+')
+            if git -C "$repo_path" remote | grep -q "^$remote_name$"; then
+                git -C "$repo_path" remote remove "$remote_name"
+                echo "Removed remote '$remote_name' from repository: $repo_path"
+            else
+                echo "Remote '$remote_name' doesn't exist in repository: $repo_path"
+            fi
+        fi
+    done < "$manifest_path"
+}
+
+function force_push() {
+    local remote_name="$1"
+    local remote_branch="$2"
+    local manifest_path="android/snippets/rising.xml"
+    local exclusion_list=("android" "vendor/risingOTA" "packages/apps/FaceUnlock" "vendor/gms")
+    echo "Pushing changes to remote '$remote_name' in repositories from manifest: $manifest_path"
+    while IFS= read -r line; do
+        if [[ $line == *"<project "* && $line == *"remote="* ]]; then
+            local repo_path=$(echo "$line" | grep -oP 'path="\K[^"]+')
+            local remote=$(echo "$line" | grep -oP 'remote="\K[^"]+')
+            local branch=$(echo "$line" | grep -oP 'revision="\K[^"]+')
+            if [[ ! "$remote" =~ ^(staging|rising)$ ]]; then
+                echo "Invalid remote '$remote' for repository '$repo_path'. Skipping..."
+                continue
+            fi
+            if [[ " ${exclusion_list[@]} " =~ " $repo_path " ]]; then
+                echo "Repository '$repo_path' is in the exclusion list. Skipping..."
+                continue
+            fi
+            if [[ -n "$remote_branch" ]]; then
+                branch="$remote_branch"
+            fi
+            echo "Pushing changes from branch '$branch' to remote '$remote_name' in repository: $repo_path"
+            if ! git -C "$repo_path" show-ref --quiet refs/heads/"$branch"; then
+                git -C "$repo_path" checkout -b "$branch" &> /dev/null
+            fi
+            git -C "$repo_path" push -f "$remote_name" "$branch" 2>&1 | grep -v "already exists"
+        fi
+    done < "$manifest_path"
+}
+
+function setupGlobalThinLto() {
+    local option="$1"
+    if [[ "$option" == "true" ]]; then
+        echo "Building with ThinLTO."
+        export GLOBAL_THINLTO=true
+        export USE_THINLTO_CACHE=true
+    elif [[ "$option" == "false" ]]; then
+        echo "Disabling ThinLTO."
+        export GLOBAL_THINLTO=false
+        export USE_THINLTO_CACHE=false
+    else
+        echo "Invalid option. Please provide either 'true' or 'false'."
+    fi
+}
+
+# usage:
+# pushRepo 190000 main fourteen
+function pushRepo() {
+    total_heads=$1
+    remote=$2
+    branch=$3
+    repo_path=$4
+    while [ $total_heads -gt 0 ]
+    do
+        commit_offset=$(( total_heads - 10000 ))
+        if [ $commit_offset -lt 0 ]; then
+            commit_offset=0
+        fi
+        git -C "$repo_path" push -u $remote HEAD~$commit_offset:refs/heads/$branch
+
+        total_heads=$(( total_heads - 10000 ))
+    done
+}
+
+function remove_broken_build_tools() {
+    for file in prebuilts/build-tools/path/*/date; do
+        if [ -e "$file" ]; then
+            rm -rf "$file"
+        fi
+    done
+
+    for file in prebuilts/build-tools/path/*/tar; do
+        if [ -e "$file" ]; then
+            rm -rf "$file"
+        fi
+    done
+}
+
+remove_broken_build_tools
+setup_ccache
 validate_current_shell
 set_global_paths
 source_vendorsetup
