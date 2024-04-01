@@ -57,6 +57,9 @@ echo "persist.sys.pihooks.build_description=$PIHOOKS_BUILD_DESC"
 echo "persist.sys.pihooks.spoof_model=$PIHOOKS_MODEL_SPOOF"
 echo "persist.sys.pihooks.spoof_tablet_model=$PIHOOKS_TABLET_SPOOF"
 echo "persist.sys.pihooks.spoof_secondary_model=$PIHOOKS_SECONDARY_SPOOF"
+echo "# RisingOS build properties"
+echo "ro.rising.maintainer=$RISING_MAINTAINER"
+echo "ro.rising.chipset=$RISING_CHIPSET"
 if [ -n "$BUILD_THUMBPRINT" ] ; then
   echo "ro.build.thumbprint=$BUILD_THUMBPRINT"
 fi
