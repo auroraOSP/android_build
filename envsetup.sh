@@ -1136,6 +1136,9 @@ function showcommands() {
     fi
 }
 
+alias adevtool='vendor/adevtool/bin/run'
+alias adto='vendor/adevtool/bin/run'
+
 # These functions used to be here but are now standalone scripts
 # in build/soong/bin.  Unset these for the time being so the real
 # script is picked up.
