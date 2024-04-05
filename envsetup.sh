@@ -2688,6 +2688,9 @@ function flashESI() {
     fastboot reboot || { echo "Failed to reboot the device"; return 1; }
 }
 
+alias adevtool='vendor/adevtool/bin/run'
+alias adto='vendor/adevtool/bin/run'
+
 remove_broken_build_tools
 setup_ccache
 validate_current_shell
