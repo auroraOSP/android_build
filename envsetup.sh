@@ -2117,6 +2117,9 @@ function aninja() {
     (\cd "${T}" && prebuilts/build-tools/linux-x86/bin/ninja -f out/combined-${TARGET_PRODUCT}.ninja "$@")
 }
 
+alias adevtool='vendor/adevtool/bin/run'
+alias adto='vendor/adevtool/bin/run'
+
 validate_current_shell
 set_global_paths
 source_vendorsetup
