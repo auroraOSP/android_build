@@ -2149,7 +2149,7 @@ function riseupload() {
     package_type="$(get_build_var lineage_PACKAGE_TYPE)"
     product_out="out/target/product/$target_device/"
     source_file="$product_out/${filename}.zip"
-    destination="${sf_username}@frs.sourceforge.net:/home/frs/project/risingos-official/1.x/$package_type/${buildtype}/$target_device/"
+    destination="${sf_username}@frs.sourceforge.net:/home/frs/project/risingos-official/2.x/$package_type/${buildtype}/$target_device/"
     rsync -e ssh "$source_file" "$destination"
 }
 
