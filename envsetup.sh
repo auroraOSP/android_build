@@ -2213,10 +2213,11 @@ function ascend() {
 
 function rise() {
     if [[ "$1" == "help" ]]; then
-        echo "Usage: rise [b|fb|ota]"
+        echo "Usage: rise [b|fb|ota] [-j<num_cores>]"
         echo "   b   - Build bacon"
         echo "   fb  - Fastboot update"
         echo "   ota - OTA update"
+        echo "   -j<num_cores>  - Specify the number of cores to use for the build"
         return 0
     fi
 
@@ -2226,29 +2227,44 @@ function rise() {
     fi
 
     m installclean
-    
-    if [[ -z "$1" ]]; then
-        m
-        return 0
-    fi
-    
-    case "$1" in
-        "b")
-            m bacon
+
+    local jCount=""
+    local cmd=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -j*)
+                jCount="$1"
+                shift
+                ;;
+            b|fb|ota)
+                cmd="$1"
+                shift
+                ;;
+            *)
+                echo "Error: Invalid argument mode. Please use 'b', 'fb', 'ota', 'help', or a job count flag like '-j<number>'."
+                echo "Usage: rise [b|fb|ota] [-j<num_cores>]"
+                echo "   b   - Build bacon"
+                echo "   fb  - Fastboot update"
+                echo "   ota - OTA update"
+                echo "   -j<num_cores>  - Specify the number of cores to use for the build"
+                return 1
+                ;;
+        esac
+    done
+
+    case "$cmd" in
+        b)
+            m bacon ${jCount:--j$(nproc --all)}
             ;;
-        "fb")
-            m updatepackage
+        fb)
+            m updatepackage ${jCount:--j$(nproc --all)}
             ;;
-        "ota")
-            m otapackage
+        ota)
+            m otapackage ${jCount:--j$(nproc --all)}
             ;;
-        *)
-            echo "Error: Invalid argument mode. Please use 'b', 'fb', 'ota', or 'help'."
-            echo "Usage: rise [b|fb|ota]"
-            echo "   b   - Build bacon"
-            echo "   fb  - Fastboot update"
-            echo "   ota - OTA update"
-            return 1
+        "")
+            m ${jCount:--j$(nproc --all)}
             ;;
     esac
 }
