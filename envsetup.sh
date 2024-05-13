@@ -2145,6 +2145,8 @@ function riseupload() {
     read -p "Enter your SourceForge username: " sf_username
     target_device="$(get_build_var TARGET_DEVICE)"
     package_type="$(get_build_var RISING_PACKAGE_TYPE)"
+    rising_version="$(get_build_var RISING_VERSION)"
+    rising_version="${rising_version%.*}.x"
     product_out="out/target/product/$target_device/"
     source_file="$(find "$product_out" -maxdepth 1 -type f -name 'risingOS-*.zip' -print -quit)"
     
@@ -2154,7 +2156,7 @@ function riseupload() {
     fi
     
     filename="$(basename "$source_file" .zip)"
-    destination="${sf_username}@frs.sourceforge.net:/home/frs/project/risingos-official/2.x/$package_type/$target_device/"
+    destination="${sf_username}@frs.sourceforge.net:/home/frs/project/risingos-official/$rising_version/$package_type/$target_device/"
     rsync -e ssh "$source_file" "$destination"
 }
 
