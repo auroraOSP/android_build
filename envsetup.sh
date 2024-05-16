@@ -2148,10 +2148,10 @@ function riseupload() {
     rising_version="$(get_build_var RISING_VERSION)"
     rising_version="${rising_version%.*}.x"
     product_out="out/target/product/$target_device/"
-    source_file="$(find "$product_out" -maxdepth 1 -type f -name 'risingOS-*.zip' -print -quit)"
+    source_file="$(find "$product_out" -maxdepth 1 -type f -name 'RisingOS-*.zip' -print -quit)"
     
     if [ -z "$source_file" ]; then
-        echo "Error: Could not find risingOS zip file in $product_out"
+        echo "Error: Could not find RisingOS zip file in $product_out"
         return 1
     fi
     
@@ -2198,27 +2198,25 @@ function ascend() {
     fi
 
     echo "ascend is deprecated. Please use rise instead."
-    echo "Usage: rise [b|fb|ota]"
+    echo "Usage: rise [b|fb]"
     echo "   b   - Build bacon"
     echo "   fb  - Fastboot update"
-    echo "   ota - OTA update"
 
     case "$1" in
         "fastboot")
             rise fb
             ;;
         *)
-            rise ota
+            rise b
             ;;
     esac
 }
 
 function rise() {
     if [[ "$1" == "help" ]]; then
-        echo "Usage: rise [b|fb|ota] [-j<num_cores>]"
+        echo "Usage: rise [b|fb] [-j<num_cores>]"
         echo "   b   - Build bacon"
         echo "   fb  - Fastboot update"
-        echo "   ota - OTA update"
         echo "   -j<num_cores>  - Specify the number of cores to use for the build"
         return 0
     fi
@@ -2239,16 +2237,15 @@ function rise() {
                 jCount="$1"
                 shift
                 ;;
-            b|fb|ota)
+            b|fb)
                 cmd="$1"
                 shift
                 ;;
             *)
-                echo "Error: Invalid argument mode. Please use 'b', 'fb', 'ota', 'help', or a job count flag like '-j<number>'."
-                echo "Usage: rise [b|fb|ota] [-j<num_cores>]"
+                echo "Error: Invalid argument mode. Please use 'b', 'fb', 'help', or a job count flag like '-j<number>'."
+                echo "Usage: rise [b|fb] [-j<num_cores>]"
                 echo "   b   - Build bacon"
                 echo "   fb  - Fastboot update"
-                echo "   ota - OTA update"
                 echo "   -j<num_cores>  - Specify the number of cores to use for the build"
                 return 1
                 ;;
@@ -2261,9 +2258,6 @@ function rise() {
             ;;
         fb)
             m updatepackage ${jCount:--j$(nproc --all)}
-            ;;
-        ota)
-            m otapackage ${jCount:--j$(nproc --all)}
             ;;
         "")
             m ${jCount:--j$(nproc --all)}
