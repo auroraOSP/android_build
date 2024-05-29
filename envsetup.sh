@@ -2214,9 +2214,10 @@ function ascend() {
 
 function rise() {
     if [[ "$1" == "help" ]]; then
-        echo "Usage: rise [b|fb] [-j<num_cores>]"
+        echo "Usage: rise [b|fb|sb] [-j<num_cores>]"
         echo "   b   - Build bacon"
         echo "   fb  - Fastboot update"
+        echo "   sb  - Signed Build"
         echo "   -j<num_cores>  - Specify the number of cores to use for the build"
         return 0
     fi
@@ -2235,24 +2236,23 @@ function rise() {
         case "$1" in
             -j*)
                 jCount="$1"
-                shift
                 ;;
-            b|fb)
+            b|fb|sb)
                 cmd="$1"
-                shift
                 ;;
             *)
-                echo "Error: Invalid argument mode. Please use 'b', 'fb', 'help', or a job count flag like '-j<number>'."
-                echo "Usage: rise [b|fb] [-j<num_cores>]"
-                echo "   b   - Build bacon"
-                echo "   fb  - Fastboot update"
-                echo "   -j<num_cores>  - Specify the number of cores to use for the build"
+                echo "Error: Invalid argument mode. Please use 'b', 'fb', 'sb', 'help', or a job count flag like '-j<number>'."
+                echo "Usage: rise [b|fb|sb] [-j<num_cores>]"
                 return 1
                 ;;
         esac
+        shift
     done
 
     case "$cmd" in
+        sb)
+            sign_build ${jCount:--j$(nproc --all)}
+            ;;
         b)
             m bacon ${jCount:--j$(nproc --all)}
             ;;
@@ -2384,6 +2384,209 @@ function pushRepo() {
 function remove_broken_build_tools() {
     rm -rf prebuilts/build-tools/path/*/date
     rm -rf prebuilts/build-tools/path/*/tar
+}
+
+function genkeys() {
+    unset key_password
+    local git_email=$(git config --global user.email)
+    if [ -z "$git_email" ]; then
+        echo "Git email address is not set. Please set it using 'git config --global user.email'."
+        exit 1
+    fi
+    read -p "Enter your email address (leave empty to use Git email: $git_email): " email
+    email=${email:-$git_email}
+    read -sp "Enter password (leave empty for no password): " key_password
+    echo ""
+    generate_keys() {
+        local email="$1"
+        local subject="/C=US/ST=California/L=Mountain View/O=Android/OU=Android/CN=Android/emailAddress=$email"
+        local key_path="$ANDROID_BUILD_TOP/vendor/rising/signing/keys"
+        local key_names=("bluetooth" "media" "networkstack" "platform" "releasekey" "sdk_sandbox" "shared" "testcert" "testkey" "verity")
+        mkdir -p "$key_path"
+        for key_name in "${key_names[@]}"; do
+            if [ -f "$key_path/$key_name.pk8" ] || [ -f "$key_path/$key_name.x509.pem" ]; then
+                echo "Deleting existing files for $key_name..."
+                rm -f "$key_path/$key_name.pk8" "$key_path/$key_name.x509.pem"
+            fi
+            if [ -n "$key_password" ]; then
+                echo "Executing make_key for $key_name with provided password..."
+                echo "$key_password" | ./development/tools/make_key "$key_path/$key_name" "$subject"
+            else
+                echo "Executing make_key for $key_name without password..."
+                echo "" | ./development/tools/make_key "$key_path/$key_name" "$subject"
+            fi
+        done
+        cp ./development/tools/make_key $key_path/
+        sed -i 's|2048|4096|g' $key_path/make_key
+        for apex in com.android.adbd com.android.adservices com.android.adservices.api com.android.appsearch com.android.art com.android.bluetooth com.android.btservices com.android.cellbroadcast com.android.compos com.android.configinfrastructure com.android.connectivity.resources com.android.conscrypt com.android.devicelock com.android.extservices com.android.graphics.pdf com.android.hardware.biometrics.face.virtual com.android.hardware.biometrics.fingerprint.virtual com.android.hardware.boot com.android.hardware.cas com.android.hardware.wifi com.android.healthfitness com.android.hotspot2.osulogin com.android.i18n com.android.ipsec com.android.media com.android.media.swcodec com.android.mediaprovider com.android.nearby.halfsheet com.android.networkstack.tethering com.android.neuralnetworks com.android.ondevicepersonalization com.android.os.statsd com.android.permission com.android.resolv com.android.rkpd com.android.runtime com.android.safetycenter.resources com.android.scheduling com.android.sdkext com.android.support.apexer com.android.telephony com.android.telephonymodules com.android.tethering com.android.tzdata com.android.uwb com.android.uwb.resources com.android.virt com.android.vndk.current com.android.vndk.current.on_vendor com.android.wifi com.android.wifi.dialog com.android.wifi.resources com.google.pixel.camera.hal com.google.pixel.vibrator.hal com.qorvo.uwb; do
+            if [ -f "$key_path/$apex.pk8" ] || [ -f "$key_path/$apex.x509.pem" ]; then
+                echo "Deleting existing files for $apex..."
+                rm -f "$key_path/$apex.pk8" "$key_path/$apex.x509.pem"
+            fi
+            echo "" | $key_path/make_key $key_path/$apex "$subject"
+            openssl pkcs8 -in $key_path/$apex.pk8 -inform DER -nocrypt -out $key_path/$apex.pem
+        done
+    }
+    echo "Generating keys using $email..."
+    generate_keys "$email"
+}
+
+function sign_build() {
+    local jobCount="$1"
+    local key_path="$ANDROID_BUILD_TOP/vendor/rising/signing/keys"
+    local device="${2:-}"
+    if [[ -z "$device" ]]; then
+        if [[ -n "$TARGET_PRODUCT" ]]; then
+            device=$(echo "$TARGET_PRODUCT" | sed -E 's/lineage_([^_]+).*/\1/')
+            echo "No device argument found, using TARGET_PRODUCT as device: $device"
+        else
+            echo "Correct usage: sign_build <device_codename>"
+            return 1
+        fi
+    fi
+    riseup "$device"
+    m target-files-package otatools "$jobCount"
+    sign_target_files
+    genSignedOta
+}
+
+function sign_target_files() {
+    croot
+    local key_path="$ANDROID_BUILD_TOP/vendor/rising/signing/keys"
+    sign_target_files_apks -o -d $key_path \
+        --extra_apks AdServicesApk.apk=$key_path/releasekey \
+        --extra_apks HalfSheetUX.apk=$key_path/releasekey \
+        --extra_apks OsuLogin.apk=$key_path/releasekey \
+        --extra_apks SafetyCenterResources.apk=$key_path/releasekey \
+        --extra_apks ServiceConnectivityResources.apk=$key_path/releasekey \
+        --extra_apks ServiceUwbResources.apk=$key_path/releasekey \
+        --extra_apks ServiceWifiResources.apk=$key_path/releasekey \
+        --extra_apks WifiDialog.apk=$key_path/releasekey \
+        --extra_apks com.android.adbd.apex=$key_path/com.android.adbd \
+        --extra_apks com.android.adservices.apex=$key_path/com.android.adservices \
+        --extra_apks com.android.adservices.api.apex=$key_path/com.android.adservices.api \
+        --extra_apks com.android.appsearch.apex=$key_path/com.android.appsearch \
+        --extra_apks com.android.art.apex=$key_path/com.android.art \
+        --extra_apks com.android.bluetooth.apex=$key_path/com.android.bluetooth \
+        --extra_apks com.android.btservices.apex=$key_path/com.android.btservices \
+        --extra_apks com.android.cellbroadcast.apex=$key_path/com.android.cellbroadcast \
+        --extra_apks com.android.compos.apex=$key_path/com.android.compos \
+        --extra_apks com.android.configinfrastructure.apex=$key_path/com.android.configinfrastructure \
+        --extra_apks com.android.connectivity.resources.apex=$key_path/com.android.connectivity.resources \
+        --extra_apks com.android.conscrypt.apex=$key_path/com.android.conscrypt \
+        --extra_apks com.android.devicelock.apex=$key_path/com.android.devicelock \
+        --extra_apks com.android.extservices.apex=$key_path/com.android.extservices \
+        --extra_apks com.android.graphics.pdf.apex=$key_path/com.android.graphics.pdf \
+        --extra_apks com.android.hardware.biometrics.face.virtual.apex=$key_path/com.android.hardware.biometrics.face.virtual \
+        --extra_apks com.android.hardware.biometrics.fingerprint.virtual.apex=$key_path/com.android.hardware.biometrics.fingerprint.virtual \
+        --extra_apks com.android.hardware.boot.apex=$key_path/com.android.hardware.boot \
+        --extra_apks com.android.hardware.cas.apex=$key_path/com.android.hardware.cas \
+        --extra_apks com.android.hardware.wifi.apex=$key_path/com.android.hardware.wifi \
+        --extra_apks com.android.healthfitness.apex=$key_path/com.android.healthfitness \
+        --extra_apks com.android.hotspot2.osulogin.apex=$key_path/com.android.hotspot2.osulogin \
+        --extra_apks com.android.i18n.apex=$key_path/com.android.i18n \
+        --extra_apks com.android.ipsec.apex=$key_path/com.android.ipsec \
+        --extra_apks com.android.media.apex=$key_path/com.android.media \
+        --extra_apks com.android.media.swcodec.apex=$key_path/com.android.media.swcodec \
+        --extra_apks com.android.mediaprovider.apex=$key_path/com.android.mediaprovider \
+        --extra_apks com.android.nearby.halfsheet.apex=$key_path/com.android.nearby.halfsheet \
+        --extra_apks com.android.networkstack.tethering.apex=$key_path/com.android.networkstack.tethering \
+        --extra_apks com.android.neuralnetworks.apex=$key_path/com.android.neuralnetworks \
+        --extra_apks com.android.ondevicepersonalization.apex=$key_path/com.android.ondevicepersonalization \
+        --extra_apks com.android.os.statsd.apex=$key_path/com.android.os.statsd \
+        --extra_apks com.android.permission.apex=$key_path/com.android.permission \
+        --extra_apks com.android.resolv.apex=$key_path/com.android.resolv \
+        --extra_apks com.android.rkpd.apex=$key_path/com.android.rkpd \
+        --extra_apks com.android.runtime.apex=$key_path/com.android.runtime \
+        --extra_apks com.android.safetycenter.resources.apex=$key_path/com.android.safetycenter.resources \
+        --extra_apks com.android.scheduling.apex=$key_path/com.android.scheduling \
+        --extra_apks com.android.sdkext.apex=$key_path/com.android.sdkext \
+        --extra_apks com.android.support.apexer.apex=$key_path/com.android.support.apexer \
+        --extra_apks com.android.telephony.apex=$key_path/com.android.telephony \
+        --extra_apks com.android.telephonymodules.apex=$key_path/com.android.telephonymodules \
+        --extra_apks com.android.tethering.apex=$key_path/com.android.tethering \
+        --extra_apks com.android.tzdata.apex=$key_path/com.android.tzdata \
+        --extra_apks com.android.uwb.apex=$key_path/com.android.uwb \
+        --extra_apks com.android.uwb.resources.apex=$key_path/com.android.uwb.resources \
+        --extra_apks com.android.virt.apex=$key_path/com.android.virt \
+        --extra_apks com.android.vndk.current.apex=$key_path/com.android.vndk.current \
+        --extra_apks com.android.vndk.current.on_vendor.apex=$key_path/com.android.vndk.current.on_vendor \
+        --extra_apks com.android.wifi.apex=$key_path/com.android.wifi \
+        --extra_apks com.android.wifi.dialog.apex=$key_path/com.android.wifi.dialog \
+        --extra_apks com.android.wifi.resources.apex=$key_path/com.android.wifi.resources \
+        --extra_apks com.google.pixel.camera.hal.apex=$key_path/com.google.pixel.camera.hal \
+        --extra_apks com.google.pixel.vibrator.hal.apex=$key_path/com.google.pixel.vibrator.hal \
+        --extra_apks com.qorvo.uwb.apex=$key_path/com.qorvo.uwb \
+        --extra_apex_payload_key com.android.adbd.apex=$key_path/com.android.adbd.pem \
+        --extra_apex_payload_key com.android.adservices.apex=$key_path/com.android.adservices.pem \
+        --extra_apex_payload_key com.android.adservices.api.apex=$key_path/com.android.adservices.api.pem \
+        --extra_apex_payload_key com.android.appsearch.apex=$key_path/com.android.appsearch.pem \
+        --extra_apex_payload_key com.android.art.apex=$key_path/com.android.art.pem \
+        --extra_apex_payload_key com.android.bluetooth.apex=$key_path/com.android.bluetooth.pem \
+        --extra_apex_payload_key com.android.btservices.apex=$key_path/com.android.btservices.pem \
+        --extra_apex_payload_key com.android.cellbroadcast.apex=$key_path/com.android.cellbroadcast.pem \
+        --extra_apex_payload_key com.android.compos.apex=$key_path/com.android.compos.pem \
+        --extra_apex_payload_key com.android.configinfrastructure.apex=$key_path/com.android.configinfrastructure.pem \
+        --extra_apex_payload_key com.android.connectivity.resources.apex=$key_path/com.android.connectivity.resources.pem \
+        --extra_apex_payload_key com.android.conscrypt.apex=$key_path/com.android.conscrypt.pem \
+        --extra_apex_payload_key com.android.devicelock.apex=$key_path/com.android.devicelock.pem \
+        --extra_apex_payload_key com.android.extservices.apex=$key_path/com.android.extservices.pem \
+        --extra_apex_payload_key com.android.graphics.pdf.apex=$key_path/com.android.graphics.pdf.pem \
+        --extra_apex_payload_key com.android.hardware.biometrics.face.virtual.apex=$key_path/com.android.hardware.biometrics.face.virtual.pem \
+        --extra_apex_payload_key com.android.hardware.biometrics.fingerprint.virtual.apex=$key_path/com.android.hardware.biometrics.fingerprint.virtual.pem \
+        --extra_apex_payload_key com.android.hardware.boot.apex=$key_path/com.android.hardware.boot.pem \
+        --extra_apex_payload_key com.android.hardware.cas.apex=$key_path/com.android.hardware.cas.pem \
+        --extra_apex_payload_key com.android.hardware.wifi.apex=$key_path/com.android.hardware.wifi.pem \
+        --extra_apex_payload_key com.android.healthfitness.apex=$key_path/com.android.healthfitness.pem \
+        --extra_apex_payload_key com.android.hotspot2.osulogin.apex=$key_path/com.android.hotspot2.osulogin.pem \
+        --extra_apex_payload_key com.android.i18n.apex=$key_path/com.android.i18n.pem \
+        --extra_apex_payload_key com.android.ipsec.apex=$key_path/com.android.ipsec.pem \
+        --extra_apex_payload_key com.android.media.apex=$key_path/com.android.media.pem \
+        --extra_apex_payload_key com.android.media.swcodec.apex=$key_path/com.android.media.swcodec.pem \
+        --extra_apex_payload_key com.android.mediaprovider.apex=$key_path/com.android.mediaprovider.pem \
+        --extra_apex_payload_key com.android.nearby.halfsheet.apex=$key_path/com.android.nearby.halfsheet.pem \
+        --extra_apex_payload_key com.android.networkstack.tethering.apex=$key_path/com.android.networkstack.tethering.pem \
+        --extra_apex_payload_key com.android.neuralnetworks.apex=$key_path/com.android.neuralnetworks.pem \
+        --extra_apex_payload_key com.android.ondevicepersonalization.apex=$key_path/com.android.ondevicepersonalization.pem \
+        --extra_apex_payload_key com.android.os.statsd.apex=$key_path/com.android.os.statsd.pem \
+        --extra_apex_payload_key com.android.permission.apex=$key_path/com.android.permission.pem \
+        --extra_apex_payload_key com.android.resolv.apex=$key_path/com.android.resolv.pem \
+        --extra_apex_payload_key com.android.rkpd.apex=$key_path/com.android.rkpd.pem \
+        --extra_apex_payload_key com.android.runtime.apex=$key_path/com.android.runtime.pem \
+        --extra_apex_payload_key com.android.safetycenter.resources.apex=$key_path/com.android.safetycenter.resources.pem \
+        --extra_apex_payload_key com.android.scheduling.apex=$key_path/com.android.scheduling.pem \
+        --extra_apex_payload_key com.android.sdkext.apex=$key_path/com.android.sdkext.pem \
+        --extra_apex_payload_key com.android.support.apexer.apex=$key_path/com.android.support.apexer.pem \
+        --extra_apex_payload_key com.android.telephony.apex=$key_path/com.android.telephony.pem \
+        --extra_apex_payload_key com.android.telephonymodules.apex=$key_path/com.android.telephonymodules.pem \
+        --extra_apex_payload_key com.android.tethering.apex=$key_path/com.android.tethering.pem \
+        --extra_apex_payload_key com.android.tzdata.apex=$key_path/com.android.tzdata.pem \
+        --extra_apex_payload_key com.android.uwb.apex=$key_path/com.android.uwb.pem \
+        --extra_apex_payload_key com.android.uwb.resources.apex=$key_path/com.android.uwb.resources.pem \
+        --extra_apex_payload_key com.android.virt.apex=$key_path/com.android.virt.pem \
+        --extra_apex_payload_key com.android.vndk.current.apex=$key_path/com.android.vndk.current.pem \
+        --extra_apex_payload_key com.android.vndk.current.on_vendor.apex=$key_path/com.android.vndk.current.on_vendor.pem \
+        --extra_apex_payload_key com.android.wifi.apex=$key_path/com.android.wifi.pem \
+        --extra_apex_payload_key com.android.wifi.dialog.apex=$key_path/com.android.wifi.dialog.pem \
+        --extra_apex_payload_key com.android.wifi.resources.apex=$key_path/com.android.wifi.resources.pem \
+        --extra_apex_payload_key com.google.pixel.camera.hal.apex=$key_path/com.google.pixel.camera.hal.pem \
+        --extra_apex_payload_key com.google.pixel.vibrator.hal.apex=$key_path/com.google.pixel.vibrator.hal.pem \
+        --extra_apex_payload_key com.qorvo.uwb.apex=$key_path/com.qorvo.uwb.pem \
+        $OUT/obj/PACKAGING/target_files_intermediates/*-target_files*.zip \
+        signed-target_files.zip
+}
+
+function genSignedOta() {
+    local key_path="$ANDROID_BUILD_TOP/vendor/rising/signing/keys"
+    ota_from_target_files -k $key_path/releasekey \
+        --block --backup=true \
+        signed-target_files.zip \
+        signed-ota_update.zip
+}
+
+function extractSignedImages() {
+    unzip signed-ota_update.zip -d signed-ota_update
+    prebuilts/extract-tools/linux-x86/bin/ota_extractor --payload signed-ota_update/payload.bin
 }
 
 alias adevtool='vendor/adevtool/bin/run'
