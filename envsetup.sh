@@ -2584,9 +2584,48 @@ function genSignedOta() {
         signed-ota_update.zip
 }
 
-function extractSignedImages() {
+function extractSI() {
+    rm -rf signed-ota_update
     unzip signed-ota_update.zip -d signed-ota_update
     prebuilts/extract-tools/linux-x86/bin/ota_extractor --payload signed-ota_update/payload.bin
+}
+
+function flashESI() {
+    extractSI
+    if [ ! -d "signed-images" ]; then
+        mkdir signed-images
+    fi
+    rm -f signed-images/*.img
+    if ls *.img 1> /dev/null 2>&1; then
+        mv *.img signed-images
+    else
+        echo "No .img files found to move."
+        return 1
+    fi
+    adb reboot fastboot &> /dev/null
+    if ! command -v fastboot &> /dev/null; then
+        echo "fastboot command not found."
+        return 1
+    fi
+    if [ -f "signed-images/system.img" ]; then
+        fastboot flash system signed-images/system.img || { echo "Failed to flash system.img"; return 1; }
+    else
+        echo "system.img not found in signed-images."
+        return 1
+    fi
+    if [ -f "signed-images/system_ext.img" ]; then
+        fastboot flash system_ext signed-images/system_ext.img || { echo "Failed to flash system_ext.img"; return 1; }
+    else
+        echo "system_ext.img not found in signed-images."
+        return 1
+    fi
+    if [ -f "signed-images/product.img" ]; then
+        fastboot flash product signed-images/product.img || { echo "Failed to flash product.img"; return 1; }
+    else
+        echo "product.img not found in signed-images."
+        return 1
+    fi
+    fastboot reboot || { echo "Failed to reboot the device"; return 1; }
 }
 
 remove_broken_build_tools
