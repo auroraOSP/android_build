@@ -2466,6 +2466,7 @@ function remove_keys() {
 }
 
 function sign_build() {
+    rising_build_version="$(get_build_var RISING_BUILD_VERSION)"
     local jobCount="$1"
     local key_path="$ANDROID_BUILD_TOP/vendor/lineage-priv/signing/keys"
     local device="${2:-}"
@@ -2482,8 +2483,8 @@ function sign_build() {
     m target-files-package otatools "$jobCount"
     sign_target_files
     genSignedOta
-    local source_file="signed-ota_update.zip"
-    local target_file="risingOS-ota-signed-$device.zip"
+    local source_file="$OUT/signed-ota_update.zip"
+    local target_file="$OUT/RisingOS-$rising_build_version-ota-signed.zip"
     if [[ -e "$source_file" ]]; then
         mv "$source_file" "$target_file"
         echo "Renamed $source_file to $target_file"
@@ -2615,14 +2616,14 @@ function sign_target_files() {
         --extra_apex_payload_key com.google.pixel.vibrator.hal.apex=$ANDROID_KEY_PATH/com.google.pixel.vibrator.hal.pem \
         --extra_apex_payload_key com.qorvo.uwb.apex=$ANDROID_KEY_PATH/com.qorvo.uwb.pem \
         $OUT/obj/PACKAGING/target_files_intermediates/*-target_files*.zip \
-        signed-target_files.zip
+        $OUT/signed-target_files.zip
 }
 
 function genSignedOta() {
     ota_from_target_files -k $ANDROID_KEY_PATH/releasekey \
         --block --backup=true \
-        signed-target_files.zip \
-        signed-ota_update.zip
+        $OUT/signed-target_files.zip \
+        $OUT/signed-ota_update.zip
 }
 
 function extractSI() {
@@ -2636,15 +2637,15 @@ function extractSI() {
             return 1
         fi
     fi
-    rm -rf signed_builds_images
-    unzip risingOS-ota-signed-$device.zip -d signed_builds_images
-    prebuilts/extract-tools/linux-x86/bin/ota_extractor --payload signed_builds_images/payload.bin
-    if [ ! -d "signed_builds_images" ]; then
-        mkdir signed_builds_images
+    rm -rf $OUT/signed_builds_images
+    unzip $OUT/RisingOS-$rising_build_version-ota-signed.zip -d $OUT/signed_builds_images
+    prebuilts/extract-tools/linux-x86/bin/ota_extractor --payload $OUT/signed_builds_images/payload.bin
+    if [ ! -d "$OUT/signed_builds_images" ]; then
+        mkdir $OUT/signed_builds_images
     fi
-    rm -f signed_builds_images/*.img
+    rm -f $OUT/signed_builds_images/*.img
     if ls *.img 1> /dev/null 2>&1; then
-        mv *.img signed_builds_images
+        mv *.img $OUT/signed_builds_images
     else
         echo "No .img files found to move."
         return 1
@@ -2658,22 +2659,22 @@ function flashESI() {
         echo "fastboot command not found."
         return 1
     fi
-    if [ -f "signed_builds_images/system.img" ]; then
-        fastboot flash system signed_builds_images/system.img || { echo "Failed to flash system.img"; return 1; }
+    if [ -f "$OUT/signed_builds_images/system.img" ]; then
+        fastboot flash system $OUT/signed_builds_images/system.img || { echo "Failed to flash system.img"; return 1; }
     else
-        echo "system.img not found in signed_builds_images."
+        echo "system.img not found in $OUT/signed_builds_images."
         return 1
     fi
-    if [ -f "signed_builds_images/system_ext.img" ]; then
-        fastboot flash system_ext signed_builds_images/system_ext.img || { echo "Failed to flash system_ext.img"; return 1; }
+    if [ -f "$OUT/signed_builds_images/system_ext.img" ]; then
+        fastboot flash system_ext $OUT/signed_builds_images/system_ext.img || { echo "Failed to flash system_ext.img"; return 1; }
     else
-        echo "system_ext.img not found in signed_builds_images."
+        echo "system_ext.img not found in $OUT/signed_builds_images."
         return 1
     fi
-    if [ -f "signed_builds_images/product.img" ]; then
-        fastboot flash product signed_builds_images/product.img || { echo "Failed to flash product.img"; return 1; }
+    if [ -f "$OUT/signed_builds_images/product.img" ]; then
+        fastboot flash product $OUT/signed_builds_images/product.img || { echo "Failed to flash product.img"; return 1; }
     else
-        echo "product.img not found in signed_builds_images."
+        echo "product.img not found in $OUT/signed_builds_images."
         return 1
     fi
     fastboot reboot || { echo "Failed to reboot the device"; return 1; }
