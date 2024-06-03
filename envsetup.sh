@@ -2251,6 +2251,10 @@ function rise() {
 
     case "$cmd" in
         sb)
+            if [[ ! -f "$ANDROID_KEY_PATH/releasekey.pk8" || ! -f "$ANDROID_KEY_PATH/releasekey.x509.pem" ]]; then
+                echo "Keys not found. Generating keys..."
+                genkeys
+            fi
             sign_build ${jCount:--j$(nproc --all)}
             ;;
         b)
