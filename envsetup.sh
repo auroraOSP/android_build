@@ -2467,6 +2467,10 @@ function remove_keys() {
 
 function sign_build() {
     rising_build_version="$(get_build_var RISING_BUILD_VERSION)"
+    rising_version="$(get_build_var RISING_VERSION)"
+    rising_codename="$(get_build_var RISING_CODENAME)"
+    rising_package_type="$(get_build_var RISING_PACKAGE_TYPE)"
+    rising_release_type="$(get_build_var RISING_RELEASE_TYPE)"
     local jobCount="$1"
     local key_path="$ANDROID_BUILD_TOP/vendor/lineage-priv/signing/keys"
     local device="${2:-}"
@@ -2492,6 +2496,10 @@ function sign_build() {
         echo "File $source_file does not exist."
         return 1
     fi
+    echo "Creating RisingOS JSON OTA..."
+    $ANDROID_BUILD_TOP/vendor/rising/build/tools/createjson.sh "$device" "$OUT" "RisingOS-$rising_build_version-ota-signed.zip" "$rising_version" "$rising_codename" "$rising_package_type" "$rising_release_type"
+    cp -f "$OUT/$device.json" "vendor/risingOTA/$device.json"
+    echo "RisingOS JSON OTA created and copied."
 }
 
 function sign_target_files() {
