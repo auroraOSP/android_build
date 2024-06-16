@@ -1,0 +1,17 @@
+com.android.adservices|AdServices
+com.android.appsearch|AppSearch
+com.android.art|art
+com.android.btservices|Bluetooth
+com.android.configinfrastructure|ConfigInfrastructure
+com.android.conscrypt|conscrypt
+com.android.healthfitness|HealthFitness
+com.android.ipsec|IPsec
+com.android.media|Media
+com.android.mediaprovider|MediaProvider
+com.android.ondevicepersonalization|OnDevicePersonalization
+com.android.os.statsd|StatsD
+com.android.permission|Permission
+com.android.sdkext|SdkExtensions
+com.android.tethering|Connectivity
+com.android.uwb|Uwb
+com.android.wifi|Wifi
