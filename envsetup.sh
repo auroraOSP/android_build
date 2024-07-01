@@ -2404,7 +2404,7 @@ function genkeys() {
     generate_keys() {
         local email="$1"
         local subject="/C=US/ST=California/L=Mountain View/O=Android/OU=Android/CN=Android/emailAddress=$email"
-        local key_names=("bluetooth" "media" "networkstack" "platform" "releasekey" "sdk_sandbox" "shared" "testcert" "testkey" "verity")
+        local key_names=("nfc" "bluetooth" "media" "networkstack" "platform" "releasekey" "sdk_sandbox" "shared" "testcert" "testkey" "verity")
         mkdir -p "$ANDROID_KEY_PATH"
         for key_name in "${key_names[@]}"; do
             if [ -f "$ANDROID_KEY_PATH/$key_name.pk8" ] || [ -f "$ANDROID_KEY_PATH/$key_name.x509.pem" ]; then
