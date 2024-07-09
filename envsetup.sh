@@ -2466,24 +2466,14 @@ function remove_keys() {
 }
 
 function sign_build() {
-    rising_build_version="$(get_build_var RISING_BUILD_VERSION)"
-    rising_version="$(get_build_var RISING_VERSION)"
-    rising_codename="$(get_build_var RISING_CODENAME)"
-    rising_package_type="$(get_build_var RISING_PACKAGE_TYPE)"
-    rising_release_type="$(get_build_var RISING_RELEASE_TYPE)"
+    local rising_build_version="$(get_build_var RISING_BUILD_VERSION)"
+    local rising_version="$(get_build_var RISING_VERSION)"
+    local rising_codename="$(get_build_var RISING_CODENAME)"
+    local rising_package_type="$(get_build_var RISING_PACKAGE_TYPE)"
+    local rising_release_type="$(get_build_var RISING_RELEASE_TYPE)"
+    local target_device="$(get_build_var TARGET_DEVICE)"
     local jobCount="$1"
     local key_path="$ANDROID_BUILD_TOP/vendor/lineage-priv/signing/keys"
-    local device="${2:-}"
-    if [[ -z "$device" ]]; then
-        if [[ -n "$TARGET_PRODUCT" ]]; then
-            device=$(echo "$TARGET_PRODUCT" | sed -E 's/lineage_([^_]+).*/\1/')
-            echo "No device argument found, using TARGET_PRODUCT as device: $device"
-        else
-            echo "Correct usage: sign_build <device_codename>"
-            return 1
-        fi
-    fi
-    riseup "$device"
     m target-files-package otatools "$jobCount"
     sign_target_files
     genSignedOta
@@ -2497,8 +2487,8 @@ function sign_build() {
         return 1
     fi
     echo "Creating RisingOS JSON OTA..."
-    $ANDROID_BUILD_TOP/vendor/rising/build/tools/createjson.sh "$device" "$OUT" "RisingOS-$rising_build_version-ota-signed.zip" "$rising_version" "$rising_codename" "$rising_package_type" "$rising_release_type"
-    cp -f "$OUT/$device.json" "vendor/risingOTA/$device.json"
+    $ANDROID_BUILD_TOP/vendor/rising/build/tools/createjson.sh "$target_device" "$OUT" "RisingOS-$rising_build_version-ota-signed.zip" "$rising_version" "$rising_codename" "$rising_package_type" "$rising_release_type"
+    cp -f "$OUT/$target_device.json" "vendor/risingOTA/$target_device.json"
     echo "RisingOS JSON OTA created and copied."
 }
 
@@ -2635,16 +2625,7 @@ function genSignedOta() {
 }
 
 function extractSI() {
-    local device="${2:-}"
-    if [[ -z "$device" ]]; then
-        if [[ -n "$TARGET_PRODUCT" ]]; then
-            device=$(echo "$TARGET_PRODUCT" | sed -E 's/lineage_([^_]+).*/\1/')
-            echo "No device argument found, using TARGET_PRODUCT as device: $device"
-        else
-            echo "Correct usage: sign_build <device_codename>"
-            return 1
-        fi
-    fi
+    local rising_build_version="$(get_build_var RISING_BUILD_VERSION)"
     rm -rf $OUT/signed_builds_images
     unzip $OUT/RisingOS-$rising_build_version-ota-signed.zip -d $OUT/signed_builds_images
     prebuilts/extract-tools/linux-x86/bin/ota_extractor --payload $OUT/signed_builds_images/payload.bin
