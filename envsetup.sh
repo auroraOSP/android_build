@@ -2404,7 +2404,7 @@ function genkeys() {
     generate_keys() {
         local email="$1"
         local subject="/C=US/ST=California/L=Mountain View/O=Android/OU=Android/CN=Android/emailAddress=$email"
-        local key_names=("nfc" "bluetooth" "media" "networkstack" "platform" "releasekey" "sdk_sandbox" "shared" "testcert" "testkey" "verity")
+        local key_names=("recovery" "nfc" "bluetooth" "media" "networkstack" "platform" "releasekey" "sdk_sandbox" "shared" "testcert" "testkey" "verity")
         mkdir -p "$ANDROID_KEY_PATH"
         for key_name in "${key_names[@]}"; do
             if [ -f "$ANDROID_KEY_PATH/$key_name.pk8" ] || [ -f "$ANDROID_KEY_PATH/$key_name.x509.pem" ]; then
@@ -2434,6 +2434,7 @@ function genkeys() {
     generate_keys "$email"
 
     echo "PRODUCT_DEFAULT_DEV_CERTIFICATE := vendor/lineage-priv/keys/releasekey" > vendor/lineage-priv/keys/keys.mk
+    echo "PRODUCT_EXTRA_RECOVERY_KEYS := vendor/lineage-priv/keys/recovery" >> vendor/lineage-priv/keys/keys.mk
 
     bazel_build_content="filegroup(
     name = \"android_certificate_directory\",
