@@ -2474,7 +2474,10 @@ function sign_build() {
     local target_device="$(get_build_var TARGET_DEVICE)"
     local jobCount="$1"
     local key_path="$ANDROID_BUILD_TOP/vendor/lineage-priv/signing/keys"
-    m target-files-package otatools "$jobCount"
+    if ! m target-files-package otatools "$jobCount"; then
+        echo "Build failed, skipping signing of the package."
+        return 1
+    fi
     sign_target_files
     genSignedOta
     local source_file="$OUT/signed-ota_update.zip"
