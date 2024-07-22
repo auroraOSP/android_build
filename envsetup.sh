@@ -2672,6 +2672,36 @@ function flashESI() {
     fastboot reboot || { echo "Failed to reboot the device"; return 1; }
 }
 
+function dlawnchair() {
+    REPO_OWNER="Goooler"
+    REPO_NAME="LawnchairRelease"
+    OUTPUT_DIR="vendor/addons/prebuilt/Lawnchair"
+    APK_NAME="Lawnchair.apk"
+
+    echo "Fetching latest release information..."
+    mkdir -p "$OUTPUT_DIR"
+    latest_release_url=$(curl -s https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest | grep "browser_download_url" | grep ".apk" | cut -d '"' -f 4)
+    echo "Latest APK URL: $latest_release_url"
+    echo "Downloading latest APK..."
+    curl -L "$latest_release_url" -o "$OUTPUT_DIR/$APK_NAME"
+    echo "Latest APK downloaded to $OUTPUT_DIR/$APK_NAME"
+}
+
+function dlawnicons() {
+    REPO_OWNER="LawnchairLauncher"
+    REPO_NAME="lawnicons"
+    OUTPUT_DIR="vendor/addons/prebuilt/Lawnicons"
+    APK_NAME="Lawnicons.apk"
+
+    echo "Fetching latest release information..."
+    mkdir -p "$OUTPUT_DIR"
+    latest_release_url=$(curl -s https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest | grep "browser_download_url" | grep ".apk" | cut -d '"' -f 4)
+    echo "Latest APK URL: $latest_release_url"
+    echo "Downloading latest APK..."
+    curl -L "$latest_release_url" -o "$OUTPUT_DIR/$APK_NAME"
+    echo "Latest APK downloaded to $OUTPUT_DIR/$APK_NAME"
+}
+
 alias adevtool='vendor/adevtool/bin/run'
 alias adto='vendor/adevtool/bin/run'
 
