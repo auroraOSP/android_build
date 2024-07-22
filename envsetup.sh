@@ -2703,6 +2703,75 @@ function dlawnicons() {
     echo "Latest APK downloaded to $OUTPUT_DIR/$APK_NAME"
 }
 
+function rcleanup() {
+    echo "Generating list of current repositories from the manifest files..."
+
+    # Initialize current_repos.txt
+    > current_repos.txt
+
+    # Aggregate project names from manifest files in .repo/manifests
+    for manifest in .repo/manifests/default.xml .repo/manifests/snippets/crdroid.xml .repo/manifests/snippets/lineage.xml .repo/manifests/snippets/pixel.xml .repo/manifests/snippets/rising.xml; 
+    do
+        if [ -f "$manifest" ]; then
+            grep 'name=' "$manifest" | sed -e 's/.*name="\([^"]*\)".*/\1/' >> current_repos.txt
+        fi
+    done
+
+    # Append project names from .repo/local_manifests/*.xml if they exist
+    if ls .repo/local_manifests/*.xml 1> /dev/null 2>&1; then
+        grep 'name=' .repo/local_manifests/*.xml | sed -e 's/.*name="\([^"]*\)".*/\1/' >> current_repos.txt
+    fi
+
+    echo "Navigating to .repo/project-objects directory..."
+    cd .repo/project-objects || { echo "Failed to navigate to .repo/project-objects"; exit 1; }
+
+    echo "Listing all repositories in .repo/project-objects..."
+    find . -type d -name "*.git" | sed 's|^\./||' | sed 's|\.git$||' > all_repos.txt
+
+    echo "Identifying old repositories..."
+    old_repos=$(comm -23 <(sort all_repos.txt) <(sort ../../current_repos.txt))
+
+    if [ -z "$old_repos" ]; then
+        echo "No old repositories to remove."
+        rm ../../current_repos.txt
+        rm all_repos.txt
+        croot
+        return
+    fi
+
+    echo "The following repositories will be removed:"
+    echo "$old_repos"
+    
+    read -p "Do you want to proceed with the removal? (y/n): " confirm
+    if [[ "$confirm" != "y" ]]; then
+        echo "Removal cancelled."
+        rm ../../current_repos.txt
+        rm all_repos.txt
+        croot
+        return
+    fi
+
+    echo "Removing old repositories..."
+    for repo in $old_repos; do
+        echo "Removing old repository: $repo"
+        rm -rf "$repo.git"
+    done
+
+    echo "Removing temporary pack files..."
+    find . -type f -name "tmp_pack_*" -exec rm -f {} +
+
+    echo "Performing garbage collection on all repositories..."
+    repo forall -c 'git gc --prune=now --aggressive'
+
+    echo "Cleaning up temporary files..."
+    rm ../../current_repos.txt
+    rm all_repos.txt
+
+    echo "Cleanup complete."
+
+    croot
+}
+
 alias adevtool='vendor/adevtool/bin/run'
 alias adto='vendor/adevtool/bin/run'
 
