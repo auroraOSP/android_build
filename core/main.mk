@@ -1081,41 +1081,6 @@ ifeq ($(HOST_OS),darwin)
   product_target_FILES :=
   product_host_FILES := $(call host-installed-files,$(INTERNAL_PRODUCT))
 else ifdef FULL_BUILD
-  ifneq (true,$(ALLOW_MISSING_DEPENDENCIES))
-    # Check to ensure that all modules in PRODUCT_PACKAGES exist (opt in per product)
-    ifeq (true,$(PRODUCT_ENFORCE_PACKAGES_EXIST))
-      _allow_list := $(PRODUCT_ENFORCE_PACKAGES_EXIST_ALLOW_LIST)
-      _modules := $(PRODUCT_PACKAGES)
-      # Strip :32 and :64 suffixes
-      _modules := $(patsubst %:32,%,$(_modules))
-      _modules := $(patsubst %:64,%,$(_modules))
-      # Quickly check all modules in PRODUCT_PACKAGES exist. We check for the
-      # existence if either <module> or the <module>_32 variant.
-      _nonexistent_modules := $(foreach m,$(_modules), \
-        $(if $(or $(ALL_MODULES.$(m).PATH),$(call get-modules-for-2nd-arch,TARGET,$(m))),,$(m)))
-      $(call maybe-print-list-and-error,$(filter-out $(_allow_list),$(_nonexistent_modules)),\
-        $(INTERNAL_PRODUCT) includes non-existent modules in PRODUCT_PACKAGES)
-      # TODO(b/182105280): Consider re-enabling this check when the ART modules
-      # have been cleaned up from the allowed_list in target/product/generic.mk.
-      #$(call maybe-print-list-and-error,$(filter-out $(_nonexistent_modules),$(_allow_list)),\
-      #  $(INTERNAL_PRODUCT) includes redundant allow list entries for non-existent PRODUCT_PACKAGES)
-    endif
-
-    # Check to ensure that all modules in PRODUCT_HOST_PACKAGES exist
-    #
-    # Many host modules are Linux-only, so skip this check on Mac. If we ever have Mac-only modules,
-    # maybe it would make sense to have PRODUCT_HOST_PACKAGES_LINUX/_DARWIN?
-    ifneq ($(HOST_OS),darwin)
-      _modules := $(PRODUCT_HOST_PACKAGES)
-      # Strip :32 and :64 suffixes
-      _modules := $(patsubst %:32,%,$(_modules))
-      _modules := $(patsubst %:64,%,$(_modules))
-      _nonexistent_modules := $(foreach m,$(_modules),\
-        $(if $(ALL_MODULES.$(m).REQUIRED_FROM_HOST)$(filter $(HOST_OUT_ROOT)/%,$(ALL_MODULES.$(m).INSTALLED)),,$(m)))
-      $(call maybe-print-list-and-error,$(_nonexistent_modules),\
-        $(INTERNAL_PRODUCT) includes non-existent modules in PRODUCT_HOST_PACKAGES)
-    endif
-  endif
 
   # Modules may produce only host installed files in unbundled builds.
   ifeq (,$(TARGET_BUILD_UNBUNDLED))
