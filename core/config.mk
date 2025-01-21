@@ -1295,6 +1295,14 @@ endif
 SOONG_VARIABLES := $(SOONG_OUT_DIR)/soong.$(TARGET_PRODUCT)$(COVERAGE_SUFFIX).variables
 SOONG_EXTRA_VARIABLES := $(SOONG_OUT_DIR)/soong.$(TARGET_PRODUCT)$(COVERAGE_SUFFIX).extra.variables
 
+ifneq ($(AURORA_DEVICE),)
+ifneq ($(wildcard device/aurora/sepolicy/common/sepolicy.mk),)
+## We need to be sure the global selinux policies are included
+## last, to avoid accidental resetting by device configs
+$(eval include device/aurora/sepolicy/common/sepolicy.mk)
+endif
+endif
+
 ifeq ($(CALLED_FROM_SETUP),true)
 include $(BUILD_SYSTEM)/ninja_config.mk
 include $(BUILD_SYSTEM)/soong_config.mk
