@@ -2,7 +2,7 @@
 
 set -ex
 
-module_build_release_ver=VanillaIceCream
+module_build_release_ver=latest
 
 function finalize_locally() {
     if [ ! -d build/make ]; then
