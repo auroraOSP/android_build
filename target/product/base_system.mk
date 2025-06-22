@@ -392,11 +392,6 @@ ifeq ($(RELEASE_TELEPHONY_MODULE),true)
        com.android.telephony2
 endif
 
-ifneq (,$(RELEASE_RANGING_STACK))
-    PRODUCT_PACKAGES += \
-        com.android.ranging
-endif
-
 ifeq ($(RELEASE_MEMORY_MANAGEMENT_DAEMON),true)
   PRODUCT_PACKAGES += \
         mm_daemon
