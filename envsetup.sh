@@ -1139,12 +1139,747 @@ unset syswrite
 unset tomlgrep
 unset treegrep
 
+function aurora() {
+    local device=""
+    local build_type=""
+    local gms_enabled=false
+    local core_gms=false
+    local vanilla_enabled=false
 
+    for arg in "$@"; do
+        case "$arg" in
+            gms)
+                if [[ "$gms_enabled" == true ]]; then
+                    echo "Error: GMS already specified."
+                    return 1
+                fi
+                if [[ "$vanilla_enabled" == true ]]; then
+                    echo "Error: Cannot specify both GMS and vanilla."
+                    return 1
+                fi
+                gms_enabled=true
+                ;;
+            core)
+                if [[ "$gms_enabled" != true ]]; then
+                    echo "Error: Core GMS variant specified without enabling GMS."
+                    return 1
+                fi
+                core_gms=true
+                ;;
+            va|vanilla)
+                if [[ "$vanilla_enabled" == true ]]; then
+                    echo "Error: Vanilla already specified."
+                    return 1
+                fi
+                if [[ "$gms_enabled" == true ]]; then
+                    echo "Error: Cannot specify both GMS and vanilla."
+                    return 1
+                fi
+                vanilla_enabled=true
+                ;;
+            user|userdebug|eng)
+                if [[ -n "$build_type" ]]; then
+                    echo "Error: Multiple build types specified ($build_type and $arg). Only one build type can be used."
+                    return 1
+                fi
+                build_type="$arg"
+                ;;
+            *)
+                if [[ -n "$device" ]]; then
+                    echo "Error: Multiple device names detected ($device and $arg). Please specify only one device."
+                    return 1
+                fi
+                device="$arg"
+                ;;
+        esac
+    done
+
+    if [ -z "$device" ]; then
+        if [[ -n "$TARGET_PRODUCT" ]]; then
+            device=$(echo "$TARGET_PRODUCT" | sed -E 's/lineage_([^_]+).*/\1/')
+            echo "No argument found for device, using TARGET_PRODUCT as device: $device"
+        else
+            echo "Correct usage: aurora <device_codename> [build_type] [gms [core] | va]"
+            echo "Available build types: user, userdebug, eng"
+            echo "Available GMS variants: core"
+            echo "Use 'va' or 'vanilla' for a non-GMS build."
+            return 1
+        fi
+    fi
+
+    if [ -z "$build_type" ]; then
+        build_type="userdebug"
+    fi
+
+    if [[ "$gms_enabled" == true ]]; then
+        export WITH_GMS=true
+        if [[ "$core_gms" == true ]]; then
+            export TARGET_CORE_GMS=true
+        else
+            export TARGET_CORE_GMS=false
+        fi
+    elif [[ "$vanilla_enabled" == true ]]; then
+        export WITH_GMS=false
+        unset TARGET_CORE_GMS
+    else
+        export WITH_GMS=false
+        unset TARGET_CORE_GMS
+    fi
+
+    source "${ANDROID_BUILD_TOP}/vendor/lineage/vars/aosp_target_release"
+
+    case "$build_type" in
+        user|userdebug|eng)
+            lunch lineage_"$device"-"$aosp_target_release"-"$build_type"
+        ;;
+        *)
+            echo "Error: Invalid build type '$build_type'. Available options: user, userdebug, eng"
+            return 1
+        ;;
+    esac
+
+    ax_help
+}
+
+function ax_help() {
+    local BOLD="\e[1m"
+    local GREEN="\e[32m"
+    local YELLOW="\e[33m"
+    local CYAN="\e[36m"
+    local RESET="\e[0m"
+
+    echo -e "${BOLD}${GREEN}=========================================${RESET}"
+    echo -e "${BOLD}${CYAN}          BUILDING INSTRUCTIONS          ${RESET}"
+    echo -e "${BOLD}${GREEN}=========================================${RESET}"
+    echo
+    echo -e "Use ${YELLOW}aurora${RESET} instead of ${YELLOW}lunch${RESET}."
+    echo
+    echo -e "aurora Usage: ${YELLOW}aurora <device_codename> [user|userdebug|eng] [gms [core] | vanilla]${RESET}"
+    echo
+    echo -e "${BOLD}ax usage:${RESET} ${YELLOW}ax [-b|-fb|-br] [-j<num>] [user|eng|userdebug]${RESET}"
+    echo
+    echo -e "${BOLD}Build Types:${RESET}"
+    echo -e "  ${YELLOW}-b${RESET}   ${CYAN}Bacon${RESET}"
+    echo -e "  ${YELLOW}-fb${RESET}  ${CYAN}Fastboot${RESET}"
+    echo -e "  ${YELLOW}-br${RESET}  ${CYAN}Brunch${RESET}"
+    echo
+    echo -e "${BOLD}Build Options:${RESET}"
+    echo -e "  ${YELLOW}-j<num>${RESET}  ${CYAN}Job count${RESET}"
+    echo -e "  ${YELLOW}user | eng | userdebug${RESET}  ${CYAN}Build variant${RESET}"
+    echo
+    echo -e "${BOLD}Defaults:${RESET}"
+    echo -e "  ${YELLOW}Job count${RESET}  ${CYAN}-j$(nproc --all)${RESET}"
+    echo -e "  ${YELLOW}Build variant${RESET}  ${CYAN}userdebug${RESET}"
+    echo -e "  ${YELLOW}Build type${RESET}  ${CYAN}m${RESET}"
+    echo -e "${BOLD}${GREEN}=========================================${RESET}"
+}
+
+function ax() {
+    if [[ "$1" == "help" ]]; then
+        ax_help
+        return 0
+    fi
+
+    local jCount=""
+    local cmd=""
+    local variant=""
+    local device=""
+
+    for arg in "$@"; do
+        if [[ "$arg" =~ ^-j[0-9]+$ ]]; then
+            jCount="$arg"
+        elif [[ "$arg" =~ ^-(b|fb|br)$ ]]; then
+            cmd="${arg:1}"
+        elif [[ "$arg" =~ ^(user|eng|userdebug)$ ]]; then
+            variant="$arg"
+        else
+            device="$arg"
+        fi
+    done
+
+    jCount="${jCount:--j$(nproc --all)}"
+
+    if [[ -n "$device" ]]; then
+        export TARGET_PRODUCT="lineage_$device"
+        echo "Setting target device to $device"
+    elif [[ -z "$TARGET_PRODUCT" ]]; then
+        echo "Error: No device target set. Please use 'aurora' or 'lunch' to set the target device."
+        return 1
+    fi
+
+    if [[ -n "$variant" ]]; then
+        export TARGET_BUILD_VARIANT="$variant"
+        echo "Setting build variant to $variant"
+    fi
+
+    m installclean
+
+    if [[ -z "$cmd" ]]; then
+        echo "Running default 'm' build with $jCount"
+        m "$jCount"
+        return
+    fi
+
+    if [[ "$cmd" == "br" ]]; then
+        local targetDevice=$(echo "$TARGET_PRODUCT" | sed -E 's/lineage_([^_]+).*/\1/')
+        echo "Running brunch for device: $targetDevice with $jCount"
+        brunch "$targetDevice" "$TARGET_BUILD_VARIANT" "$jCount"
+        return
+    fi
+
+    case "$cmd" in
+        b)
+            m bacon "$jCount"
+            ;;
+        fb)
+            m updatepackage "$jCount"
+            ;;
+    esac
+}
+
+function auroraSync() {
+    yes y | repo init -u https://github.com/auroraOSP/android.git -b lineage-23.0 --git-lfs
+    repo sync --force-sync
+}
+
+# usage (buildInstallApp): biApp Launcher3QuickStep/SettingsGoogle etc
+function biApp() {
+    local package="$1"
+    if [[ "$package" == "L3" ]]; then
+        package="TrebuchetQuickStep"
+    elif [[ "$package" == "SG" ]]; then
+        package="SettingsGoogle"
+    fi
+    m "$package"
+    iApp "$package"
+}
+
+# usage (installApp): iApp Launcher3QuickStep/SettingsGoogle etc
+function iApp() {
+    local target_device="$(get_build_var TARGET_DEVICE)"
+    local package="$1"
+    if [[ "$package" == "L3" ]]; then
+        package="TrebuchetQuickStep"
+    elif [[ "$package" == "SG" ]]; then
+        package="SettingsGoogle"
+    fi
+    local apk_path=$(find "out/target/product/$target_device/" \
+        \( -path "*/system_ext/*" -o -path "*/product/*" -o -path "*/system/*" \) \
+        -type f -name "$package.apk" -print -quit)
+
+    if [[ -z "$apk_path" ]]; then
+        echo "Error: APK for package '$package' not found in system_ext, product, or system directories."
+        return 1
+    fi
+
+    echo "Installing: $apk_path"
+    adb install "$apk_path"
+}
+
+# usage: biPart system_ext/system/product/vendor
+function biPart() {
+    local partition="$1"
+    bPart "$partition"
+    iPart "$partition"
+}
+
+# usage: bPart system_ext/system/product/vendor
+function bPart() {
+    local partition="$1"
+    case "$partition" in
+        system_ext)
+            m systemextimage
+            ;;
+        product)
+            m productimage
+            ;;
+        system)
+            m systemimage
+            ;;
+        vendor)
+            m vendorimage
+            ;;
+        *)
+            echo "Error: Unknown partition '$partition'. Valid options: system_ext, product, system, vendor."
+            return 1
+            ;;
+    esac
+}
+
+# usage: iPart system_ext/system/product/vendor
+function iPart() {
+    local partition="$1"
+    local target_device="$(get_build_var TARGET_DEVICE)"
+    local img_path
+    case "$partition" in
+        system_ext|product|system|vendor)
+            img_path="out/target/product/$target_device/$partition.img"
+            ;;
+        *)
+            echo "Error: Unknown partition '$partition'. Valid options: system_ext, product, system, vendor."
+            return 1
+            ;;
+    esac
+    if [[ ! -f "$img_path" ]]; then
+        echo "Error: Image for partition '$partition' not found at $img_path."
+        return 1
+    fi
+    echo "Flashing $partition image: $img_path"
+    adb reboot fastboot
+    fastboot flash "$partition" "$img_path" && fastboot reboot
+}
+
+function setup_ccache() {
+    if [ -z "${CCACHE_EXEC}" ]; then
+        if command -v ccache &>/dev/null; then
+            export USE_CCACHE=1
+            export CCACHE_EXEC=$(command -v ccache)
+            [ -z "${CCACHE_DIR}" ] && export CCACHE_DIR="$HOME/.ccache"
+            echo "ccache directory found, CCACHE_DIR set to: $CCACHE_DIR" >&2
+
+            CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-40G}"
+            DIRECT_MODE="${DIRECT_MODE:-false}"
+
+            $CCACHE_EXEC -o compression=true -o direct_mode="${DIRECT_MODE}" -M "${CCACHE_MAXSIZE}" \
+                && echo "ccache enabled, CCACHE_EXEC set to: $CCACHE_EXEC, CCACHE_MAXSIZE set to: $CCACHE_MAXSIZE, direct_mode set to: $DIRECT_MODE" >&2 \
+                || echo "Warning: Could not set cache size limit. Please check ccache configuration." >&2
+
+            if [ -d "$CCACHE_DIR" ]; then
+                CURRENT_CCACHE_SIZE_BYTES=$(du -sb "$CCACHE_DIR" 2>/dev/null | awk '{print $1}')
+                CURRENT_CCACHE_SIZE_GB=$(echo "$CURRENT_CCACHE_SIZE_BYTES" | awk '{printf "%.2f\n", $1 / 1000 / 1000 / 1000}')
+
+                if [ -n "$CURRENT_CCACHE_SIZE_GB" ]; then
+                    echo "Current ccache size is: ${CURRENT_CCACHE_SIZE_GB} GB" >&2
+                else
+                    echo "No cached files in ccache." >&2
+                fi
+            else
+                echo "Warning: ccache directory does not exist: $CCACHE_DIR" >&2
+            fi
+        else
+            echo "Error: ccache not found. Please install ccache." >&2
+        fi
+    fi
+}
+
+function generate_keys() {
+    local subject="/C=US/ST=California/L=Los Angeles/O=auroraOS/OU=auroraOS/CN=auroraOS"
+    echo "Subject string: $subject"
+    local key_names=("${@}")
+    if [ -d "$ANDROID_KEY_PATH" ]; then
+        echo "Cleaning up $ANDROID_KEY_PATH while preserving .git..."
+        find "$ANDROID_KEY_PATH" -mindepth 1 -maxdepth 1 ! -name ".git" -exec rm -rf {} +
+    fi
+    mkdir -p "$ANDROID_KEY_PATH"
+    for key_name in "${key_names[@]}"; do
+        if [ -f "$ANDROID_KEY_PATH/$key_name.pk8" ] || [ -f "$ANDROID_KEY_PATH/$key_name.x509.pem" ]; then
+            echo "Deleting existing files for $key_name..."
+            rm -f "$ANDROID_KEY_PATH/$key_name.pk8" "$ANDROID_KEY_PATH/$key_name.x509.pem"
+        fi
+        echo "Executing make_key for $key_name without password..."
+        echo "" | ./development/tools/make_key "$ANDROID_KEY_PATH/$key_name" "$subject"
+    done
+}
+
+function show_help() {
+    echo "Usage: gk [option]"
+    echo ""
+    echo "Options:"
+    echo "  -s          Generate keys for simple signing"
+    echo "  -h, --help  Show generate keys instructions"
+}
+
+function gk() {
+    local mode="$1"
+    case "$mode" in
+        -h|--help)
+            show_help
+            return 0
+            ;;
+        -s)
+            local key_names=("nfc" "bluetooth" "media" "networkstack" "platform" "releasekey" "sdk_sandbox" "shared" "testkey" "verifiedboot")
+            ;;
+        *)
+            show_help
+            return 0
+            ;;
+    esac
+    echo "Generating keys..."
+    generate_keys "${key_names[@]}"
+    echo "PRODUCT_DEFAULT_DEV_CERTIFICATE := vendor/lineage-priv/keys/releasekey" > vendor/lineage-priv/keys/keys.mk
+    bazel_build_content="filegroup(
+    name = \"android_certificate_directory\",
+    srcs = glob([
+        \"*.pk8\",
+        \"*.pem\",
+    ]),
+    visibility = [\"//visibility:public\"],
+)"
+    echo "$bazel_build_content" > vendor/lineage-priv/keys/BUILD.bazel
+    if [ "$mode" == "-f" ]; then
+        local subject="/C=US/ST=California/L=Los Angeles/O=auroraOS/OU=auroraOS/CN=auroraOS"
+        cp ./development/tools/make_key $ANDROID_KEY_PATH/
+        sed -i 's|2048|4096|g' $ANDROID_KEY_PATH/make_key
+        for apex in com.android.adbd com.android.adservices com.android.adservices.api com.android.appsearch com.android.art com.android.bluetooth com.android.btservices com.android.cellbroadcast com.android.compos com.android.configinfrastructure com.android.connectivity.resources com.android.conscrypt com.android.devicelock com.android.extservices com.android.graphics.pdf com.android.hardware.biometrics.face.virtual com.android.hardware.biometrics.fingerprint.virtual com.android.hardware.boot com.android.hardware.cas com.android.hardware.wifi com.android.healthfitness com.android.hotspot2.osulogin com.android.i18n com.android.ipsec com.android.media com.android.media.swcodec com.android.mediaprovider com.android.nearby.halfsheet com.android.networkstack.tethering com.android.neuralnetworks com.android.ondevicepersonalization com.android.os.statsd com.android.permission com.android.resolv com.android.rkpd com.android.runtime com.android.safetycenter.resources com.android.scheduling com.android.sdkext com.android.support.apexer com.android.telephony com.android.telephonymodules com.android.tethering com.android.tzdata com.android.uwb com.android.uwb.resources com.android.virt com.android.vndk.current com.android.vndk.current.on_vendor com.android.wifi com.android.wifi.dialog com.android.wifi.resources com.google.pixel.camera.hal com.google.pixel.vibrator.hal com.qorvo.uwb; do
+            if [ -f "$ANDROID_KEY_PATH/$apex.pk8" ] || [ -f "$ANDROID_KEY_PATH/$apex.x509.pem" ]; then
+                echo "Deleting existing files for $apex..."
+                rm -f "$ANDROID_KEY_PATH/$apex.pk8" "$ANDROID_KEY_PATH/$apex.x509.pem"
+            fi
+            echo "" | $ANDROID_KEY_PATH/make_key $ANDROID_KEY_PATH/$apex "$subject"
+            openssl pkcs8 -in $ANDROID_KEY_PATH/$apex.pk8 -inform DER -nocrypt -out $ANDROID_KEY_PATH/$apex.pem
+        done
+    fi
+}
+
+function remove_keys() {
+    local key_mk="vendor/lineage-priv/keys/keys.mk"
+    local build_bazel="vendor/lineage-priv/keys/BUILD.bazel"
+    if [ -f "$key_mk" ]; then
+        echo "Removing $key_mk..."
+        sudo rm -f "$key_mk"
+    else
+        echo "$key_mk does not exist."
+    fi
+    if [ -f "$build_bazel" ]; then
+        echo "Removing $build_bazel..."
+        sudo rm -f "$build_bazel"
+    else
+        echo "$build_bazel does not exist."
+    fi
+}
+
+function rcleanup() {
+    echo "Generating list of current repositories from the manifest files..."
+
+    # Initialize current_repos.txt
+    > current_repos.txt
+
+    # Aggregate project names from manifest files in .repo/manifests
+    for manifest in .repo/manifests/default.xml .repo/manifests/snippets/lineage.xml .repo/manifests/snippets/pixel.xml .repo/manifests/snippets/aurora.xml;
+    do
+        if [ -f "$manifest" ]; then
+            grep 'name=' "$manifest" | sed -e 's/.*name="\([^"]*\)".*/\1/' >> current_repos.txt
+        fi
+    done
+
+    # Append project names from .repo/local_manifests/*.xml if they exist
+    if ls .repo/local_manifests/*.xml 1> /dev/null 2>&1; then
+        grep 'name=' .repo/local_manifests/*.xml | sed -e 's/.*name="\([^"]*\)".*/\1/' >> current_repos.txt
+    fi
+
+    echo "Navigating to .repo/project-objects directory..."
+    cd .repo/project-objects || { echo "Failed to navigate to .repo/project-objects"; exit 1; }
+
+    echo "Listing all repositories in .repo/project-objects..."
+    find . -type d -name "*.git" | sed 's|^\./||' | sed 's|\.git$||' > all_repos.txt
+
+    echo "Identifying old repositories..."
+    old_repos=$(comm -23 <(sort all_repos.txt) <(sort ../../current_repos.txt))
+
+    if [ -z "$old_repos" ]; then
+        echo "No old repositories to remove."
+        rm ../../current_repos.txt
+        rm all_repos.txt
+        croot
+        return
+    fi
+
+    echo "The following repositories will be removed:"
+    echo "$old_repos"
+
+    read -p "Do you want to proceed with the removal? (y/n): " confirm
+    if [[ "$confirm" != "y" ]]; then
+        echo "Removal cancelled."
+        rm ../../current_repos.txt
+        rm all_repos.txt
+        croot
+        return
+    fi
+
+    echo "Removing old repositories..."
+    for repo in $old_repos; do
+        echo "Removing old repository: $repo"
+        rm -rf "$repo.git"
+    done
+
+    echo "Removing temporary pack files..."
+    find . -type f -name "tmp_pack_*" -exec rm -f {} +
+
+    echo "Performing garbage collection on all repositories..."
+    repo forall -c 'git gc --prune=now --aggressive'
+
+    echo "Cleaning up temporary files..."
+    rm ../../current_repos.txt
+    rm all_repos.txt
+
+    echo "Cleanup complete."
+
+    croot
+}
+
+function setup_keys() {
+    if [[ ! -d vendor/lineage-priv/keys ]]; then
+        gk -s
+    fi
+}
+
+function generate_host_overrides() {
+    export BUILD_USERNAME=android-build
+    HEX=$(openssl rand -hex 8)
+    ALPHA=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 4 | head -n 1)
+    export BUILD_HOSTNAME="r-${HEX}-${ALPHA}"
+    echo "BUILD_USERNAME=$BUILD_USERNAME"
+    echo "BUILD_HOSTNAME=$BUILD_HOSTNAME"
+}
+
+function cpo {
+    local device="$1"
+    local output_dir="out/target/product/$device"
+    local base_dest_dir="$HOME/ROM"
+
+    local latest_zip
+    latest_zip=$(ls -t "$output_dir"/*.zip 2>/dev/null | head -n 1)
+
+    if [[ -z "$latest_zip" ]]; then
+        echo "No zip file found in $output_dir."
+        return 1
+    fi
+
+    mkdir -p "$base_dest_dir"
+    cp "$latest_zip" "$base_dest_dir" && echo "Copied $(basename "$latest_zip") to $base_dest_dir"
+
+    if [[ "$latest_zip" == *GMS* ]]; then
+        local dest_dir="$base_dest_dir/GMS"
+        mkdir -p "$dest_dir"
+        cp "$output_dir/GMS/$device.json" "$dest_dir" && echo "Copied $device.json from GMS folder"
+    elif [[ "$latest_zip" == *VANILLA* ]]; then
+        local dest_dir="$base_dest_dir/VANILLA"
+        mkdir -p "$dest_dir"
+        cp "$output_dir/VANILLA/$device.json" "$dest_dir" && echo "Copied $device.json from VANILLA folder"
+    else
+        echo "Neither GMS nor VANILLA detected in zip name."
+    fi
+}
+
+function bpx() {
+    function get_devices() {
+        case "$1" in
+            "6") echo "raven oriole bluejay" ;;
+            "7") echo "cheetah panther" ;;
+            *) echo "oriole raven bluejay panther cheetah" ;;
+        esac
+    }
+
+    local devices
+    devices=$(get_devices "$1")
+    local base_dir="$HOME/ROM"
+
+    for device in $devices; do
+        local gms_zip="$base_dir/auroraOS-*GMS-$device.zip"
+        local vanilla_zip="$base_dir/auroraOS-*VANILLA-$device.zip"
+
+        if ls $gms_zip &>/dev/null && ls $vanilla_zip &>/dev/null; then
+            echo "Both GMS and VANILLA builds exist for $device. Skipping..."
+            continue
+        fi
+
+        if ! ls $vanilla_zip &>/dev/null; then
+            echo "VANILLA build missing for $device. Building..."
+            aurora "$device" va
+            ax -br "$device"
+            cpo "$device"
+        else
+            echo "VANILLA build already exists for $device. Skipping Vanilla..."
+        fi
+
+        if ! ls $gms_zip &>/dev/null; then
+            echo "GMS build missing for $device. Building..."
+            aurora "$device" gms
+            ax -br "$device"
+            cpo "$device"
+        else
+            echo "GMS build already exists for $device. Skipping GMS..."
+        fi
+    done
+}
+
+function initPixelRoomService() {
+    local ROOM_DIR="$(pwd)"
+    local MANIFESTS_DIR="$ROOM_DIR/.repo/local_manifests"
+    local ROOM_URL="https://raw.githubusercontent.com/auroraOSP/roomservice_pixels/refs/heads/main/roomservice.xml"
+    local OUTPUT_FILE="$MANIFESTS_DIR/roomservice.xml"
+
+    echo "[*] Starting pixel room service..."
+
+    if [ ! -d "$MANIFESTS_DIR" ]; then
+        mkdir -p "$MANIFESTS_DIR" || { echo "[!] Failed to create directory."; exit 1; }
+    fi
+
+    if [ -f "$OUTPUT_FILE" ]; then
+        echo "[*] Backing up existing roomservice.xml"
+        cp "$OUTPUT_FILE" "$OUTPUT_FILE.bak" || { echo "[!] Backup failed."; exit 1; }
+    fi
+
+    echo "[*] Downloading roomservice.xml..."
+    if curl -fsSL "$ROOM_URL" -o "$OUTPUT_FILE"; then
+        echo "[✓] roomservice.xml successfully written to $OUTPUT_FILE"
+    else
+        echo "[!] Failed to fetch roomservice.xml"
+        exit 1
+    fi
+}
+
+function rbr() {
+    set +m
+
+    local ROOT_DIR="$(pwd)"
+    local AURORA_MANIFEST="$ROOT_DIR/android/snippets/aurora.xml"
+    local ROOMSERVICE_MANIFEST="$ROOT_DIR/.repo/local_manifests/roomservice.xml"
+    local TARGET_BRANCH="lineage-23.0"
+    local MAX_JOBS=12
+
+    local UPSTREAM_REMOTE="aurora"
+    local UPSTREAM_DEVICES_REMOTE="aurora_devices"
+
+    local REBASE_AURORA=true
+    local REBASE_DEVICES=true
+
+    case "$1" in
+        -m) REBASE_DEVICES=false ;;
+        -d) REBASE_AURORA=false ;;
+        -a|""|*) ;;
+    esac
+
+    local TMP_REPO_LIST
+    TMP_REPO_LIST=$(mktemp)
+
+    extract_projects_from_manifest() {
+        local manifest_file="$1"
+        local remote_name="$2"
+
+        grep '<project ' "$manifest_file" | \
+            grep "remote=\"$remote_name\"" | \
+            sed -n "s/.*path=\"\([^\"]*\\)\".*name=\"\([^\"]*\)\".*/\1|\2|$remote_name/p"
+    }
+
+    if $REBASE_AURORA && [[ -f "$AURORA_MANIFEST" ]]; then
+        extract_projects_from_manifest "$AURORA_MANIFEST" "$UPSTREAM_REMOTE" >> "$TMP_REPO_LIST"
+    fi
+
+    if $REBASE_DEVICES && [[ -f "$ROOMSERVICE_MANIFEST" ]]; then
+        extract_projects_from_manifest "$ROOMSERVICE_MANIFEST" "$UPSTREAM_DEVICES_REMOTE" >> "$TMP_REPO_LIST"
+    fi
+
+    local -a SUCCESS_REPOS=()
+    local -a SKIPPED_REPOS=()
+    local -a FAILED_REPOS=()
+    local TMP_DIR
+    TMP_DIR=$(mktemp -d)
+
+    process_repo() {
+        local REPO_PATH="$1"
+        local REPO_NAME="$2"
+        local PUSH_REMOTE="$3"
+
+        echo "[INFO] Processing $REPO_PATH ($REPO_NAME) with remote '$PUSH_REMOTE'..."
+
+        if [[ ! -d "$ROOT_DIR/$REPO_PATH" ]]; then
+            echo "[WARN] Directory $REPO_PATH not found, skipping."
+            echo "SKIPPED $REPO_PATH" > "$TMP_DIR/${REPO_PATH//\//_}.status"
+            return
+        fi
+
+        echo "[INFO] Fetching from LineageOS/$REPO_NAME..."
+        if ! git -C "$ROOT_DIR/$REPO_PATH" fetch "https://github.com/LineageOS/$REPO_NAME" "$TARGET_BRANCH" 2>/dev/null; then
+            echo "[WARN] Branch '$TARGET_BRANCH' not found in LineageOS/$REPO_NAME, skipping."
+            echo "SKIPPED $REPO_PATH" > "$TMP_DIR/${REPO_PATH//\//_}.status"
+            return
+        fi
+
+        echo "[INFO] Rebasing onto LineageOS/$TARGET_BRANCH..."
+        if ! git -C "$ROOT_DIR/$REPO_PATH" rebase FETCH_HEAD 2>/dev/null; then
+            echo "[ERROR] Rebase failed or conflict in $REPO_PATH."
+            git -C "$ROOT_DIR/$REPO_PATH" rebase --abort >/dev/null 2>&1
+            echo "FAILED $REPO_PATH" > "$TMP_DIR/${REPO_PATH//\//_}.status"
+            return
+        fi
+
+        echo "[INFO] Pushing to $PUSH_REMOTE/$TARGET_BRANCH..."
+        if ! git -C "$ROOT_DIR/$REPO_PATH" push -f --set-upstream "$PUSH_REMOTE" "$TARGET_BRANCH" 2>/dev/null; then
+            echo "[INFO] Push failed or unnecessary for $REPO_PATH"
+            echo "SKIPPED $REPO_PATH" > "$TMP_DIR/${REPO_PATH//\//_}.status"
+            return
+        fi
+
+        echo "[OK] Successfully rebased and pushed: $REPO_PATH"
+        echo "SUCCESS $REPO_PATH" > "$TMP_DIR/${REPO_PATH//\//_}.status"
+    }
+
+    TOTAL_REPOS=$(wc -l < "$TMP_REPO_LIST")
+    PROCESSED=0
+    JOBS=0
+
+    echo "[INFO] Performing rebase operations"
+
+    while IFS='|' read -r REPO_PATH REPO_NAME PUSH_REMOTE; do
+        PROCESSED=$((PROCESSED + 1))
+        echo "Processing $PROCESSED/$TOTAL_REPOS: $REPO_PATH..."
+
+        { (process_repo "$REPO_PATH" "$REPO_NAME" "$PUSH_REMOTE" > "$TMP_DIR/${REPO_PATH//\//_}.log" 2>&1) & } 2>/dev/null
+
+        JOBS=$((JOBS + 1))
+        if [[ "$JOBS" -ge "$MAX_JOBS" ]]; then
+            wait -n
+            JOBS=$((JOBS - 1))
+        fi
+    done < "$TMP_REPO_LIST"
+
+    wait
+
+    for STATUS_FILE in "$TMP_DIR"/*.status; do
+        [[ ! -f "$STATUS_FILE" ]] && continue
+        RESULT=$(cut -d' ' -f1 "$STATUS_FILE")
+        REPO=$(cut -d' ' -f2- "$STATUS_FILE")
+        case "$RESULT" in
+            SUCCESS) SUCCESS_REPOS+=("$REPO") ;;
+            SKIPPED) SKIPPED_REPOS+=("$REPO") ;;
+            FAILED)  FAILED_REPOS+=("$REPO") ;;
+        esac
+    done
+
+    rm -rf "$TMP_REPO_LIST" "$TMP_DIR"
+
+    echo ""
+    echo "[DONE] All repositories processed."
+    echo ""
+    echo "===== SUMMARY ====="
+    echo "Successful: ${#SUCCESS_REPOS[@]}"
+    echo "Failed:     ${#FAILED_REPOS[@]}"
+    echo "Skipped:    ${#SKIPPED_REPOS[@]}"
+
+    if [[ ${#FAILED_REPOS[@]} -gt 0 ]]; then
+        echo ""
+        echo "Failed Repos:"
+        printf ' - %s\n' "${FAILED_REPOS[@]}"
+    fi
+
+    if [[ ${#SKIPPED_REPOS[@]} -gt 0 ]]; then
+        echo ""
+        echo "Skipped Repos:"
+        printf ' - %s\n' "${SKIPPED_REPOS[@]}"
+    fi
+}
+
+setup_keys
+setup_ccache
 validate_current_shell
 set_global_paths
 source_vendorsetup
 addcompletions
+ax_help
+generate_host_overrides
 
 export ANDROID_BUILD_TOP=$(gettop)
+export ANDROID_KEY_PATH="$ANDROID_BUILD_TOP/vendor/lineage-priv/keys"
 
 . $ANDROID_BUILD_TOP/vendor/lineage/build/envsetup.sh
