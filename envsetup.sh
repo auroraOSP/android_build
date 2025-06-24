@@ -1153,6 +1153,13 @@ function showcommands() {
     fi
 }
 
+function generate_host_overrides() {
+    export BUILD_USERNAME=android-build
+    export BUILD_HOSTNAME=$(openssl rand -hex 6)
+    echo "BUILD_USERNAME=$BUILD_USERNAME"
+    echo "BUILD_HOSTNAME=$BUILD_HOSTNAME"
+}
+
 # These functions used to be here but are now standalone scripts
 # in build/soong/bin.  Unset these for the time being so the real
 # script is picked up.
@@ -1216,6 +1223,7 @@ validate_current_shell
 set_global_paths
 source_vendorsetup
 addcompletions
+generate_host_overrides
 
 if [[ "$USE_LEFTOVERS" -eq 1 ]]; then
   leftovers
