@@ -1346,9 +1346,9 @@ function auroraSync() {
 function biApp() {
     local package="$1"
     if [[ "$package" == "L3" ]]; then
-        package="TrebuchetQuickStep"
+        package="Launcher3QuickStep"
     elif [[ "$package" == "SG" ]]; then
-        package="SettingsGoogle"
+        package="Settings"
     fi
     m "$package"
     iApp "$package"
@@ -1359,9 +1359,9 @@ function iApp() {
     local target_device="$(get_build_var TARGET_DEVICE)"
     local package="$1"
     if [[ "$package" == "L3" ]]; then
-        package="TrebuchetQuickStep"
+        package="Launcher3QuickStep"
     elif [[ "$package" == "SG" ]]; then
-        package="SettingsGoogle"
+        package="Settings"
     fi
     local apk_path=$(find "out/target/product/$target_device/" \
         \( -path "*/system_ext/*" -o -path "*/product/*" -o -path "*/system/*" \) \
@@ -1376,57 +1376,83 @@ function iApp() {
     adb install "$apk_path"
 }
 
-# usage: biPart system_ext/system/product/vendor
+# Usage: biPart se|p|s|v
 function biPart() {
-    local partition="$1"
-    bPart "$partition"
-    iPart "$partition"
+    local short_partition="$1"
+
+    if ! part "$short_partition"; then
+        echo "Error occured. Aborting."
+        return 1
+    fi
+
+    if ! iPart "$short_partition"; then
+        echo "Error occured. Aborting installation"
+        return 1
+    fi
 }
 
-# usage: bPart system_ext/system/product/vendor
-function bPart() {
-    local partition="$1"
-    case "$partition" in
-        system_ext)
+function part() {
+    local part="$1"
+    case "$part" in
+        se)
             m systemextimage
             ;;
-        product)
+        p)
             m productimage
             ;;
-        system)
+        s)
             m systemimage
             ;;
-        vendor)
+        v)
             m vendorimage
             ;;
         *)
-            echo "Error: Unknown partition '$partition'. Valid options: system_ext, product, system, vendor."
+            echo "Error: Unknown partition '$part'. Valid options: se, p, s, v."
             return 1
             ;;
     esac
 }
 
-# usage: iPart system_ext/system/product/vendor
 function iPart() {
-    local partition="$1"
-    local target_device="$(get_build_var TARGET_DEVICE)"
-    local img_path
-    case "$partition" in
-        system_ext|product|system|vendor)
-            img_path="out/target/product/$target_device/$partition.img"
+    local part="$1"
+    local partition
+    case "$part" in
+        se)
+            partition="system_ext"
+            ;;
+        p)
+            partition="product"
+            ;;
+        s)
+            partition="system"
+            ;;
+        v)
+            partition="vendor"
             ;;
         *)
-            echo "Error: Unknown partition '$partition'. Valid options: system_ext, product, system, vendor."
+            echo "Error: Unknown part partition '$part'. Valid options: se, p, s, v."
             return 1
             ;;
     esac
+
+    local target_device
+    target_device="$(get_build_var TARGET_DEVICE)"
+    local img_path="out/target/product/$target_device/$partition.img"
+
     if [[ ! -f "$img_path" ]]; then
         echo "Error: Image for partition '$partition' not found at $img_path."
         return 1
     fi
+
     echo "Flashing $partition image: $img_path"
     adb reboot fastboot
-    fastboot flash "$partition" "$img_path" && fastboot reboot
+    sleep 5
+    if fastboot flash "$partition" "$img_path"; then
+        fastboot reboot
+    else
+        echo "Error: fastboot flash failed for $partition."
+        return 1
+    fi
 }
 
 function setup_ccache() {
