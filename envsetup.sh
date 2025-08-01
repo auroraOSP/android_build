@@ -1703,7 +1703,7 @@ function generate_host_overrides() {
     echo "BUILD_HOSTNAME=$BUILD_HOSTNAME"
 }
 
-function cpo {
+function cpo() {
     local device="$1"
     local output_dir="out/target/product/$device"
     local base_dest_dir="$HOME/ROM"
@@ -1717,16 +1717,16 @@ function cpo {
     fi
 
     mkdir -p "$base_dest_dir"
-    cp "$latest_zip" "$base_dest_dir" && echo "Copied $(basename "$latest_zip") to $base_dest_dir"
+    mv "$latest_zip" "$base_dest_dir" && echo "Moved $(basename "$latest_zip") to $base_dest_dir"
 
     if [[ "$latest_zip" == *GMS* ]]; then
         local dest_dir="$base_dest_dir/GMS"
         mkdir -p "$dest_dir"
-        cp "$output_dir/GMS/$device.json" "$dest_dir" && echo "Copied $device.json from GMS folder"
+        mv "$output_dir/GMS/$device.json" "$dest_dir" && echo "Moved $device.json from GMS folder"
     elif [[ "$latest_zip" == *VANILLA* ]]; then
         local dest_dir="$base_dest_dir/VANILLA"
         mkdir -p "$dest_dir"
-        cp "$output_dir/VANILLA/$device.json" "$dest_dir" && echo "Copied $device.json from VANILLA folder"
+        mv "$output_dir/VANILLA/$device.json" "$dest_dir" && echo "Moved $device.json from VANILLA folder"
     else
         echo "Neither GMS nor VANILLA detected in zip name."
     fi
@@ -1737,24 +1737,21 @@ function bpx() {
         case "$1" in
             "6") echo "raven oriole bluejay" ;;
             "7") echo "cheetah panther" ;;
-            *) echo "oriole raven bluejay panther cheetah" ;;
+            *) echo "cheetah panther raven oriole bluejay  " ;;
         esac
     }
 
-    local devices
-    devices=$(get_devices "$1")
     local base_dir="$HOME/ROM"
+    local devices
+    devices=($(get_devices "$1"))
 
-    for device in $devices; do
-        local gms_zip="$base_dir/auroraOS-*GMS-$device.zip"
-        local vanilla_zip="$base_dir/auroraOS-*VANILLA-$device.zip"
+    for device in "${devices[@]}"; do
+        local vanilla_zip
+        local gms_zip
+        vanilla_zip=$(ls "$base_dir"/auroraOS-*VANILLA-"$device".zip 2>/dev/null)
+        gms_zip=$(ls "$base_dir"/auroraOS-*GMS-"$device".zip 2>/dev/null)
 
-        if ls $gms_zip &>/dev/null && ls $vanilla_zip &>/dev/null; then
-            echo "Both GMS and VANILLA builds exist for $device. Skipping..."
-            continue
-        fi
-
-        if ! ls $vanilla_zip &>/dev/null; then
+        if [[ -z "$vanilla_zip" ]]; then
             echo "VANILLA build missing for $device. Building..."
             aurora "$device" va
             ax -br "$device"
@@ -1763,7 +1760,7 @@ function bpx() {
             echo "VANILLA build already exists for $device. Skipping Vanilla..."
         fi
 
-        if ! ls $gms_zip &>/dev/null; then
+        if [[ -z "$gms_zip" ]]; then
             echo "GMS build missing for $device. Building..."
             aurora "$device" gms
             ax -br "$device"
