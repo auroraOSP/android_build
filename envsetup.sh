@@ -1652,12 +1652,8 @@ function cpo() {
         local dest_dir="$base_dest_dir/GMS"
         mkdir -p "$dest_dir"
         mv "$output_dir/GMS/$device.json" "$dest_dir" && echo "Moved $device.json from GMS folder"
-    elif [[ "$latest_zip" == *VANILLA* ]]; then
-        local dest_dir="$base_dest_dir/VANILLA"
-        mkdir -p "$dest_dir"
-        mv "$output_dir/VANILLA/$device.json" "$dest_dir" && echo "Moved $device.json from VANILLA folder"
     else
-        echo "Neither GMS nor VANILLA detected in zip name."
+        echo "No GMS detected in zip name."
     fi
 }
 
@@ -1669,26 +1665,12 @@ function bpx() {
             *) echo "cheetah panther raven oriole bluejay  " ;;
         esac
     }
-
     local base_dir="$HOME/ROM"
     local devices
     devices=($(get_devices "$1"))
-
     for device in "${devices[@]}"; do
-        local vanilla_zip
         local gms_zip
-        vanilla_zip=$(ls "$base_dir"/auroraOS-*VANILLA-"$device".zip 2>/dev/null)
         gms_zip=$(ls "$base_dir"/auroraOS-*GMS-"$device".zip 2>/dev/null)
-
-        if [[ -z "$vanilla_zip" ]]; then
-            echo "VANILLA build missing for $device. Building..."
-            aurora "$device" va
-            ax -br "$device"
-            cpo "$device"
-        else
-            echo "VANILLA build already exists for $device. Skipping Vanilla..."
-        fi
-
         if [[ -z "$gms_zip" ]]; then
             echo "GMS build missing for $device. Building..."
             aurora "$device" gms
