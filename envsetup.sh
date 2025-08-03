@@ -1350,30 +1350,51 @@ function biApp() {
     elif [[ "$package" == "SG" ]]; then
         package="Settings"
     fi
-    m "$package"
+
+    echo "Building package: $package"
+    if ! m "$package"; then
+        echo "Warning: Build failed for $package. Skipping installation."
+        return 1
+    fi
+
     iApp "$package"
 }
 
 # usage (installApp): iApp Launcher3QuickStep/SettingsGoogle etc
 function iApp() {
-    local target_device="$(get_build_var TARGET_DEVICE)"
+    local target_device
+    target_device="$(get_build_var TARGET_DEVICE)"
     local package="$1"
+
     if [[ "$package" == "L3" ]]; then
         package="Launcher3QuickStep"
     elif [[ "$package" == "SG" ]]; then
         package="Settings"
     fi
-    local apk_path=$(find "out/target/product/$target_device/" \
+
+    while true; do
+        if adb get-state 1>/dev/null 2>&1; then
+            break
+        fi
+        echo "Waiting for device..."
+        sleep 2
+    done
+
+    local apk_path
+    apk_path=$(find "out/target/product/$target_device/" \
         \( -path "*/system_ext/*" -o -path "*/product/*" -o -path "*/system/*" \) \
         -type f -name "$package.apk" -print -quit)
 
     if [[ -z "$apk_path" ]]; then
-        echo "Error: APK for package '$package' not found in system_ext, product, or system directories."
+        echo "Error: APK for package '$package' not found."
         return 1
     fi
 
     echo "Installing: $apk_path"
-    adb install "$apk_path"
+    if ! adb install "$apk_path"; then
+        echo "Warning: Failed to install $package. Skipping."
+        return 1
+    fi
 }
 
 # Usage: biPart se|p|s|v
