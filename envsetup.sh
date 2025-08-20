@@ -620,6 +620,9 @@ function lunch()
         cd - > /dev/null
     fi
 
+    # Generate build-manifest.xml after roomservice finishes
+    vendor/aurora/build/tools/gen_build-manifest.sh
+
     # Validate the selection and set all the environment stuff
     _lunch_meat $product $release $variant
 
