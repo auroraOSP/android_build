@@ -1465,9 +1465,21 @@ function iPart() {
         return 1
     fi
 
+    echo "Waiting for adb device..."
+    until adb get-state 1>/dev/null 2>&1; do
+        sleep 2
+    done
+    echo "Device detected!"
+
     echo "Flashing $partition image: $img_path"
     adb reboot fastboot
-    sleep 5
+
+    echo "Waiting for fastboot device..."
+    until fastboot devices | grep -q '^[a-zA-Z0-9]\+'; do
+        sleep 2
+    done
+    echo "Fastboot device detected!"
+
     if fastboot flash "$partition" "$img_path"; then
         fastboot reboot
     else
