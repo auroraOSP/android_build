@@ -1770,6 +1770,10 @@ function rbr() {
     local REBASE_AURORA=true
     local REBASE_DEVICES=true
 
+    local -a BLACKLIST=(
+        "frameworks/base"
+    )
+
     case "$1" in
         -m) REBASE_DEVICES=false ;;
         -d) REBASE_AURORA=false ;;
@@ -1801,6 +1805,16 @@ function rbr() {
     local -a FAILED_REPOS=()
     local TMP_DIR
     TMP_DIR=$(mktemp -d)
+
+    is_blacklisted() {
+        local repo_path="$1"
+        for blocked in "${BLACKLIST[@]}"; do
+            if [[ "$repo_path" == "$blocked" ]]; then
+                return 0
+            fi
+        done
+        return 1
+    }
 
     process_repo() {
         local REPO_PATH="$1"
@@ -1848,6 +1862,12 @@ function rbr() {
     echo "[INFO] Performing rebase operations"
 
     while IFS='|' read -r REPO_PATH REPO_NAME PUSH_REMOTE; do
+        if is_blacklisted "$REPO_PATH"; then
+            echo "[INFO] Skipping blacklisted repo: $REPO_PATH"
+            SKIPPED_REPOS+=("$REPO_PATH")
+            continue
+        fi
+
         PROCESSED=$((PROCESSED + 1))
         echo "Processing $PROCESSED/$TOTAL_REPOS: $REPO_PATH..."
 
