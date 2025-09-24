@@ -49,6 +49,7 @@ $(call add_soong_config_var,ANDROID,TARGET_ADD_ROOT_EXTRA_VENDOR_SYMLINKS)
 
 # For BUILDING_GSI
 $(call soong_config_set_bool,gsi,building_gsi,$(if $(filter true,$(BUILDING_GSI)),true,false))
+$(call soong_config_set_bool,gsi,building_aurora_gsi,$(if $(filter true,$(BUILDING_AURORA_GSI)),true,false))
 
 # For bootable/recovery
 RECOVERY_API_VERSION := 3
